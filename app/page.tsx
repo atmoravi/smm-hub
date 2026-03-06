@@ -1,3 +1,3 @@
 'use client'
 
-export { default } from '../components/SmmHub'
+export { default } from './components/SmmHub'
