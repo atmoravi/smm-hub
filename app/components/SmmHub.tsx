@@ -95,6 +95,7 @@ const SmmHub = () => {
 
   // Core state
   const [activeTab, setActiveTab] = useState('dashboard')
+  const [settingsSubTab, setSettingsSubTab] = useState<'api' | 'users'>('api') // Settings sub-tabs
 
   const [workers, setWorkers] = useState(() => {
     if (typeof window === 'undefined') return []
@@ -749,67 +750,114 @@ const SmmHub = () => {
         {/* ── SETTINGS (admin only) ── */}
         {activeTab === 'settings' && isAdmin && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-            <div>
-              <h2 style={{ fontWeight: 900, fontSize: 20, margin: '0 0 6px' }}>API Endpoints & Keys</h2>
-              <p style={{ color: '#64748b', fontSize: 13, margin: '0 0 20px' }}>Use these endpoints and API keys to pipe data from your traffic sources into SMM Hub. Each source has its own key.</p>
+            {/* Settings Sub-tabs */}
+            <div style={{ display: 'flex', gap: 8, borderBottom: '1px solid #e2e8f0', paddingBottom: 0 }}>
+              <button
+                onClick={() => setSettingsSubTab('api')}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  padding: '12px 20px',
+                  borderRadius: '10px 10px 0 0',
+                  border: 'none',
+                  background: settingsSubTab === 'api' ? 'white' : 'transparent',
+                  color: settingsSubTab === 'api' ? '#3b82f6' : '#64748b',
+                  fontWeight: settingsSubTab === 'api' ? 700 : 500,
+                  fontSize: 14,
+                  cursor: 'pointer',
+                  borderBottom: settingsSubTab === 'api' ? '2px solid #3b82f6' : '2px solid transparent',
+                  marginBottom: -1,
+                }}
+              >
+                <Key size={16}/> API Endpoints
+              </button>
+              <button
+                onClick={() => setSettingsSubTab('users')}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  padding: '12px 20px',
+                  borderRadius: '10px 10px 0 0',
+                  border: 'none',
+                  background: settingsSubTab === 'users' ? 'white' : 'transparent',
+                  color: settingsSubTab === 'users' ? '#3b82f6' : '#64748b',
+                  fontWeight: settingsSubTab === 'users' ? 700 : 500,
+                  fontSize: 14,
+                  cursor: 'pointer',
+                  borderBottom: settingsSubTab === 'users' ? '2px solid #3b82f6' : '2px solid transparent',
+                  marginBottom: -1,
+                }}
+              >
+                <Users size={16}/> User Management
+              </button>
             </div>
 
-            {keysLoading ? (
-              <div style={{ textAlign: 'center', padding: 40, color: '#94a3b8' }}>Loading API keys...</div>
-            ) : apiKeys?.length ? (
-              apiKeys.map(({ source, key, createdAt, updatedAt }) => {
-                const ep = {
-                  organicLeads: { url: '/api/leads/organic', label: 'Organic Leads', color: '#10b981' },
-                  paidLeads: { url: '/api/leads/paid', label: 'Paid Leads', color: '#3b82f6' },
-                  purchases: { url: '/api/purchases', label: 'Purchases', color: '#f59e0b' },
-                }[source]
-                return (
-                  <div key={source} style={{ background: 'white', borderRadius: 16, border: '1px solid #e2e8f0', overflow: 'hidden' }}>
-                    <div style={{ padding: '18px 24px', borderBottom: '1px solid #f1f5f9', display: 'flex', alignItems: 'center', gap: 12 }}>
-                      <div style={{ width: 10, height: 10, borderRadius: '50%', background: ep.color, boxShadow: `0 0 0 3px ${ep.color}22` }}/>
-                      <span style={{ fontWeight: 800, fontSize: 15 }}>{ep.label}</span>
-                      <span style={{ background: '#f1f5f9', borderRadius: 6, padding: '3px 10px', fontSize: 11, fontWeight: 700, color: '#64748b', marginLeft: 'auto' }}>POST</span>
-                    </div>
-                    <div style={{ padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: 14 }}>
-                      {/* Endpoint URL */}
-                      <div>
-                        <label style={{ fontSize: 11, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 0.8, display: 'block', marginBottom: 6 }}>Endpoint URL</label>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                          <code style={{ flex: 1, background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 10, padding: '11px 14px', fontSize: 13, fontFamily: "'DM Mono', monospace", color: '#334155' }}>
-                            {typeof window !== 'undefined' ? window.location.origin : ''}{ep.url}
-                          </code>
-                          <button onClick={() => { navigator.clipboard.writeText(`${typeof window !== 'undefined' ? window.location.origin : ''}${ep.url}`) }} style={{ background: '#f1f5f9', border: 'none', borderRadius: 8, padding: '10px 14px', cursor: 'pointer', color: '#64748b', display: 'flex', alignItems: 'center', gap: 6, fontWeight: 600, fontSize: 12 }}>
-                            <Copy size={13}/> Copy
-                          </button>
-                        </div>
-                      </div>
+            {/* API Keys Tab */}
+            {settingsSubTab === 'api' && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+                <div>
+                  <h2 style={{ fontWeight: 900, fontSize: 20, margin: '0 0 6px' }}>API Endpoints & Keys</h2>
+                  <p style={{ color: '#64748b', fontSize: 13, margin: '0 0 20px' }}>Use these endpoints and API keys to pipe data from your traffic sources into SMM Hub. Each source has its own key.</p>
+                </div>
 
-                      {/* API Key */}
-                      <div>
-                        <label style={{ fontSize: 11, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 0.8, display: 'block', marginBottom: 6 }}>API Key</label>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                          <code style={{ flex: 1, background: '#0f172a', border: '1px solid #1e293b', borderRadius: 10, padding: '11px 14px', fontSize: 13, fontFamily: "'DM Mono', monospace", color: '#7dd3fc', letterSpacing: 1 }}>
-                            {visibleKeys[source] ? key : key.slice(0, 10) + '•'.repeat(24)}
-                          </code>
-                          <button onClick={() => setVisibleKeys(prev => ({...prev, [source]: !prev[source]}))} style={{ background: '#f1f5f9', border: 'none', borderRadius: 8, padding: '10px 12px', cursor: 'pointer', color: '#64748b', display: 'flex', alignItems: 'center' }}>
-                            {visibleKeys[source] ? <EyeOff size={14}/> : <Eye size={14}/>}
-                          </button>
-                          <button onClick={() => { navigator.clipboard.writeText(key); setCopiedKey(source); setTimeout(() => setCopiedKey(null), 2000) }} style={{ background: copiedKey === source ? '#f0fdf4' : '#f1f5f9', border: 'none', borderRadius: 8, padding: '10px 14px', cursor: 'pointer', color: copiedKey === source ? '#10b981' : '#64748b', display: 'flex', alignItems: 'center', gap: 6, fontWeight: 600, fontSize: 12 }}>
-                            {copiedKey === source ? <><Check size={13}/> Copied</> : <><Copy size={13}/> Copy</>}
-                          </button>
-                          <button onClick={() => rotateKey(source)} title="Rotate key" style={{ background: '#fff7ed', border: 'none', borderRadius: 8, padding: '10px 12px', cursor: 'pointer', color: '#f59e0b', display: 'flex', alignItems: 'center' }}>
-                            <RefreshCw size={14}/>
-                          </button>
+                {keysLoading ? (
+                  <div style={{ textAlign: 'center', padding: 40, color: '#94a3b8' }}>Loading API keys...</div>
+                ) : apiKeys?.length ? (
+                  apiKeys.map(({ source, key, createdAt, updatedAt }) => {
+                    const ep = {
+                      organicLeads: { url: '/api/leads/organic', label: 'Organic Leads', color: '#10b981' },
+                      paidLeads: { url: '/api/leads/paid', label: 'Paid Leads', color: '#3b82f6' },
+                      purchases: { url: '/api/purchases', label: 'Purchases', color: '#f59e0b' },
+                    }[source]
+                    return (
+                      <div key={source} style={{ background: 'white', borderRadius: 16, border: '1px solid #e2e8f0', overflow: 'hidden' }}>
+                        <div style={{ padding: '18px 24px', borderBottom: '1px solid #f1f5f9', display: 'flex', alignItems: 'center', gap: 12 }}>
+                          <div style={{ width: 10, height: 10, borderRadius: '50%', background: ep.color, boxShadow: `0 0 0 3px ${ep.color}22` }}/>
+                          <span style={{ fontWeight: 800, fontSize: 15 }}>{ep.label}</span>
+                          <span style={{ background: '#f1f5f9', borderRadius: 6, padding: '3px 10px', fontSize: 11, fontWeight: 700, color: '#64748b', marginLeft: 'auto' }}>POST</span>
                         </div>
-                        <p style={{ fontSize: 11, color: '#94a3b8', marginTop: 6 }}>Last updated: {new Date(updatedAt).toLocaleDateString()}</p>
-                      </div>
+                        <div style={{ padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: 14 }}>
+                          {/* Endpoint URL */}
+                          <div>
+                            <label style={{ fontSize: 11, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 0.8, display: 'block', marginBottom: 6 }}>Endpoint URL</label>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                              <code style={{ flex: 1, background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 10, padding: '11px 14px', fontSize: 13, fontFamily: "'DM Mono', monospace", color: '#334155' }}>
+                                {typeof window !== 'undefined' ? window.location.origin : ''}{ep.url}
+                              </code>
+                              <button onClick={() => { navigator.clipboard.writeText(`${typeof window !== 'undefined' ? window.location.origin : ''}${ep.url}`) }} style={{ background: '#f1f5f9', border: 'none', borderRadius: 8, padding: '10px 14px', cursor: 'pointer', color: '#64748b', display: 'flex', alignItems: 'center', gap: 6, fontWeight: 600, fontSize: 12 }}>
+                                <Copy size={13}/> Copy
+                              </button>
+                            </div>
+                          </div>
 
-                      {/* Example payload */}
-                      <details style={{ marginTop: 4 }}>
-                        <summary style={{ fontSize: 12, fontWeight: 700, color: '#94a3b8', cursor: 'pointer', userSelect: 'none', display: 'flex', alignItems: 'center', gap: 6 }}>
-                          <ChevronDown size={13}/> Example payload
-                        </summary>
-                        <pre style={{ background: '#0f172a', borderRadius: 10, padding: '14px 16px', marginTop: 10, fontSize: 12, fontFamily: "'DM Mono', monospace", color: '#94a3b8', overflowX: 'auto', lineHeight: 1.6 }}>
+                          {/* API Key */}
+                          <div>
+                            <label style={{ fontSize: 11, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 0.8, display: 'block', marginBottom: 6 }}>API Key</label>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                              <code style={{ flex: 1, background: '#0f172a', border: '1px solid #1e293b', borderRadius: 10, padding: '11px 14px', fontSize: 13, fontFamily: "'DM Mono', monospace", color: '#7dd3fc', letterSpacing: 1 }}>
+                                {visibleKeys[source] ? key : key.slice(0, 10) + '•'.repeat(24)}
+                              </code>
+                              <button onClick={() => setVisibleKeys(prev => ({...prev, [source]: !prev[source]}))} style={{ background: '#f1f5f9', border: 'none', borderRadius: 8, padding: '10px 12px', cursor: 'pointer', color: '#64748b', display: 'flex', alignItems: 'center' }}>
+                                {visibleKeys[source] ? <EyeOff size={14}/> : <Eye size={14}/>}
+                              </button>
+                              <button onClick={() => { navigator.clipboard.writeText(key); setCopiedKey(source); setTimeout(() => setCopiedKey(null), 2000) }} style={{ background: copiedKey === source ? '#f0fdf4' : '#f1f5f9', border: 'none', borderRadius: 8, padding: '10px 14px', cursor: 'pointer', color: copiedKey === source ? '#10b981' : '#64748b', display: 'flex', alignItems: 'center', gap: 6, fontWeight: 600, fontSize: 12 }}>
+                                {copiedKey === source ? <><Check size={13}/> Copied</> : <><Copy size={13}/> Copy</>}
+                              </button>
+                              <button onClick={() => rotateKey(source)} title="Rotate key" style={{ background: '#fff7ed', border: 'none', borderRadius: 8, padding: '10px 12px', cursor: 'pointer', color: '#f59e0b', display: 'flex', alignItems: 'center' }}>
+                                <RefreshCw size={14}/>
+                              </button>
+                            </div>
+                            <p style={{ fontSize: 11, color: '#94a3b8', marginTop: 6 }}>Last updated: {new Date(updatedAt).toLocaleDateString()}</p>
+                          </div>
+
+                          {/* Example payload */}
+                          <details style={{ marginTop: 4 }}>
+                            <summary style={{ fontSize: 12, fontWeight: 700, color: '#94a3b8', cursor: 'pointer', userSelect: 'none', display: 'flex', alignItems: 'center', gap: 6 }}>
+                              <ChevronDown size={13}/> Example payload
+                            </summary>
+                            <pre style={{ background: '#0f172a', borderRadius: 10, padding: '14px 16px', marginTop: 10, fontSize: 12, fontFamily: "'DM Mono', monospace", color: '#94a3b8', overflowX: 'auto', lineHeight: 1.6 }}>
 {source === 'organicLeads' ? `POST ${ep.url}
 x-api-key: ${key.slice(0,20)}...
 
@@ -835,23 +883,28 @@ x-api-key: ${key.slice(0,20)}...
   "source": "organic" | "paid",
   "orderId": "ORD-9182"
 }`}
-                        </pre>
-                      </details>
-                    </div>
+                            </pre>
+                          </details>
+                        </div>
+                      </div>
+                    )
+                  })
+                ) : (
+                  <div style={{ textAlign: 'center', padding: 40, color: '#94a3b8' }}>No API keys found. Please run the seed script.</div>
+                )}
+
+                <div style={{ background: '#fffbeb', border: '1px solid #fcd34d', borderRadius: 14, padding: '16px 20px', display: 'flex', gap: 12, alignItems: 'flex-start' }}>
+                  <AlertCircle size={18} color="#f59e0b" style={{flexShrink:0, marginTop:1}}/>
+                  <div>
+                    <p style={{ fontWeight: 700, fontSize: 13, margin: '0 0 4px' }}>Keep your API keys secret</p>
+                    <p style={{ fontSize: 12, color: '#92400e', margin: 0 }}>Keys give write access to your SMM Hub data. Rotate immediately if one is exposed.</p>
                   </div>
-                )
-              })
-            ) : (
-              <div style={{ textAlign: 'center', padding: 40, color: '#94a3b8' }}>No API keys found. Please run the seed script.</div>
+                </div>
+              </div>
             )}
 
-            <div style={{ background: '#fffbeb', border: '1px solid #fcd34d', borderRadius: 14, padding: '16px 20px', display: 'flex', gap: 12, alignItems: 'flex-start' }}>
-              <AlertCircle size={18} color="#f59e0b" style={{flexShrink:0, marginTop:1}}/>
-              <div>
-                <p style={{ fontWeight: 700, fontSize: 13, margin: '0 0 4px' }}>Keep your API keys secret</p>
-                <p style={{ fontSize: 12, color: '#92400e', margin: 0 }}>Keys give write access to your SMM Hub data. Rotate immediately if one is exposed. Each source has an independent key so you can revoke them individually.</p>
-              </div>
-            </div>
+            {/* User Management Tab */}
+            {settingsSubTab === 'users' && <UserManagement />}
           </div>
         )}
 
@@ -904,6 +957,391 @@ x-api-key: ${key.slice(0,20)}...
           </div>
         )}
 
+      </div>
+    </div>
+  )
+}
+
+// ─── User Management Component ────────────────────────────────────────────────
+const UserManagement = () => {
+  const [users, setUsers] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
+  const [showForm, setShowForm] = useState(false)
+  const [editingUser, setEditingUser] = useState<any>(null)
+  const [formData, setFormData] = useState({
+    name: '',
+    username: '',
+    email: '',
+    password: '',
+    role: 'user',
+  })
+  const [avatarPreview, setAvatarPreview] = useState<string | null>(null)
+  const [avatarFile, setAvatarFile] = useState<File | null>(null)
+  const [error, setError] = useState('')
+  const [success, setSuccess] = useState('')
+
+  const fetchUsers = async () => {
+    try {
+      const res = await fetch('/api/users')
+      const data = await res.json()
+      setUsers(data.users || [])
+    } catch (err) {
+      console.error('Failed to fetch users:', err)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    fetchUsers()
+  }, [])
+
+  const handleImageChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    // Validate
+    const validTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp']
+    if (!validTypes.includes(file.type)) {
+      setError('Please upload a JPG, PNG, or WebP image')
+      return
+    }
+    if (file.size > 2 * 1024 * 1024) {
+      setError('Image must be less than 2MB')
+      return
+    }
+
+    try {
+      // Compress image
+      const canvas = document.createElement('canvas')
+      const ctx = canvas.getContext('2d')
+      const img = new Image()
+
+      img.onload = () => {
+        let width = img.width
+        let height = img.height
+        const maxSize = 800
+
+        if (width > height) {
+          if (width > maxSize) {
+            height = Math.round((height * maxSize) / width)
+            width = maxSize
+          }
+        } else {
+          if (height > maxSize) {
+            width = Math.round((width * maxSize) / height)
+            height = maxSize
+          }
+        }
+
+        canvas.width = width
+        canvas.height = height
+        ctx?.drawImage(img, 0, 0, width, height)
+
+        // Compress to under 300KB
+        let quality = 0.95
+        const compress = () => {
+          const base64 = canvas.toDataURL('image/jpeg', quality)
+          const sizeKB = (base64.length * 3) / 4 / 1024
+
+          if (sizeKB > 300 && quality > 0.1) {
+            quality -= 0.1
+            compress()
+          } else {
+            setAvatarPreview(base64)
+            setAvatarFile(file)
+            setError('')
+          }
+        }
+        compress()
+      }
+      img.src = URL.createObjectURL(file)
+    } catch (err) {
+      setError('Failed to process image')
+    }
+  }
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setError('')
+    setSuccess('')
+
+    if (!formData.name || !formData.username || !formData.email || (!formData.password && !editingUser)) {
+      setError('Please fill in all required fields')
+      return
+    }
+
+    try {
+      const url = editingUser ? `/api/users/${editingUser.id}` : '/api/users'
+      const method = editingUser ? 'PUT' : 'POST'
+
+      const body: any = { ...formData }
+      if (avatarPreview) body.avatarUrl = avatarPreview
+      if (!formData.password && editingUser) delete body.password
+
+      const res = await fetch(url, {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      })
+
+      const data = await res.json()
+
+      if (!res.ok) {
+        setError(data.error || 'Failed to save user')
+        return
+      }
+
+      setSuccess(editingUser ? 'User updated successfully' : 'User created successfully')
+      setFormData({ name: '', username: '', email: '', password: '', role: 'user' })
+      setAvatarPreview(null)
+      setAvatarFile(null)
+      setShowForm(false)
+      setEditingUser(null)
+      fetchUsers()
+      setTimeout(() => setSuccess(''), 3000)
+    } catch (err) {
+      setError('Failed to save user')
+    }
+  }
+
+  const handleEdit = (user: any) => {
+    setEditingUser(user)
+    setFormData({
+      name: user.name,
+      username: user.username,
+      email: user.email,
+      password: '',
+      role: user.role,
+    })
+    setAvatarPreview(user.avatarUrl || null)
+    setShowForm(true)
+  }
+
+  const handleDelete = async (id: string, name: string) => {
+    if (!confirm(`Are you sure you want to delete ${name}?`)) return
+
+    try {
+      const res = await fetch(`/api/users/${id}`, { method: 'DELETE' })
+      if (res.ok) {
+        setSuccess('User deleted successfully')
+        fetchUsers()
+        setTimeout(() => setSuccess(''), 3000)
+      } else {
+        setError('Failed to delete user')
+      }
+    } catch (err) {
+      setError('Failed to delete user')
+    }
+  }
+
+  const handleToggleActive = async (user: any) => {
+    try {
+      const res = await fetch(`/api/users/${user.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ active: !user.active }),
+      })
+      if (res.ok) {
+        fetchUsers()
+      }
+    } catch (err) {
+      console.error('Failed to toggle active:', err)
+    }
+  }
+
+  if (loading) {
+    return <div style={{ textAlign: 'center', padding: 40, color: '#94a3b8' }}>Loading users...</div>
+  }
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+      {/* Header */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div>
+          <h2 style={{ fontWeight: 900, fontSize: 20, margin: '0 0 6px' }}>User Management</h2>
+          <p style={{ color: '#64748b', fontSize: 13, margin: 0 }}>Manage user accounts, roles, and permissions</p>
+        </div>
+        <button
+          onClick={() => { setShowForm(true); setEditingUser(null); setFormData({ name: '', username: '', email: '', password: '', role: 'user' }); setAvatarPreview(null) }}
+          style={{ background: 'linear-gradient(135deg,#3b82f6,#6366f1)', border: 'none', borderRadius: 10, padding: '12px 20px', color: 'white', fontWeight: 700, cursor: 'pointer', fontSize: 14, display: 'flex', alignItems: 'center', gap: 8 }}
+        >
+          <Plus size={18}/> Add User
+        </button>
+      </div>
+
+      {/* Messages */}
+      {error && (
+        <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 10, padding: '12px 16px', color: '#dc2626', fontSize: 13 }}>
+          {error}
+        </div>
+      )}
+      {success && (
+        <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 10, padding: '12px 16px', color: '#16a34a', fontSize: 13 }}>
+          {success}
+        </div>
+      )}
+
+      {/* Add/Edit Form Modal */}
+      {showForm && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
+          <div style={{ background: 'white', borderRadius: 16, padding: 32, width: '100%', maxWidth: 480, maxHeight: '90vh', overflowY: 'auto' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
+              <h3 style={{ fontWeight: 900, fontSize: 18, margin: 0 }}>{editingUser ? 'Edit User' : 'Add New User'}</h3>
+              <button onClick={() => { setShowForm(false); setEditingUser(null); setAvatarPreview(null) }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8', padding: 4 }}>
+                <Trash2 size={20}/>
+              </button>
+            </div>
+
+            <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+              {/* Avatar Upload */}
+              <div>
+                <label style={{ fontSize: 12, fontWeight: 700, color: '#64748b', display: 'block', marginBottom: 8 }}>Profile Picture</label>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+                  <div style={{ width: 80, height: 80, borderRadius: '50%', background: avatarPreview ? 'none' : '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
+                    {avatarPreview ? (
+                      <img src={avatarPreview} alt="Preview" style={{ width: '100%', height: '100%', objectFit: 'cover' }}/>
+                    ) : (
+                      <User size={32} color="#cbd5e1"/>
+                    )}
+                  </div>
+                  <label style={{ background: '#f1f5f9', borderRadius: 8, padding: '10px 16px', cursor: 'pointer', fontSize: 13, fontWeight: 600, color: '#475569' }}>
+                    Upload Image
+                    <input type="file" accept="image/*" onChange={handleImageChange} style={{ display: 'none' }}/>
+                  </label>
+                </div>
+                <p style={{ fontSize: 11, color: '#94a3b8', marginTop: 6 }}>Max 300KB (auto-compressed). JPG, PNG, WebP</p>
+              </div>
+
+              {/* Name */}
+              <div>
+                <label style={{ fontSize: 12, fontWeight: 700, color: '#64748b', display: 'block', marginBottom: 6 }}>Full Name *</label>
+                <input
+                  type="text"
+                  value={formData.name}
+                  onChange={e => setFormData({ ...formData, name: e.target.value })}
+                  style={{ width: '100%', padding: '10px 14px', border: '1px solid #e2e8f0', borderRadius: 8, fontSize: 14, boxSizing: 'border-box' }}
+                  placeholder="John Doe"
+                  required
+                />
+              </div>
+
+              {/* Username */}
+              <div>
+                <label style={{ fontSize: 12, fontWeight: 700, color: '#64748b', display: 'block', marginBottom: 6 }}>Username *</label>
+                <input
+                  type="text"
+                  value={formData.username}
+                  onChange={e => setFormData({ ...formData, username: e.target.value })}
+                  style={{ width: '100%', padding: '10px 14px', border: '1px solid #e2e8f0', borderRadius: 8, fontSize: 14, boxSizing: 'border-box' }}
+                  placeholder="johndoe"
+                  required
+                />
+              </div>
+
+              {/* Email */}
+              <div>
+                <label style={{ fontSize: 12, fontWeight: 700, color: '#64748b', display: 'block', marginBottom: 6 }}>Email *</label>
+                <input
+                  type="email"
+                  value={formData.email}
+                  onChange={e => setFormData({ ...formData, email: e.target.value })}
+                  style={{ width: '100%', padding: '10px 14px', border: '1px solid #e2e8f0', borderRadius: 8, fontSize: 14, boxSizing: 'border-box' }}
+                  placeholder="john@example.com"
+                  required
+                />
+              </div>
+
+              {/* Password */}
+              <div>
+                <label style={{ fontSize: 12, fontWeight: 700, color: '#64748b', display: 'block', marginBottom: 6 }}>Password {editingUser ? '(leave blank to keep)' : '*'}</label>
+                <input
+                  type="password"
+                  value={formData.password}
+                  onChange={e => setFormData({ ...formData, password: e.target.value })}
+                  style={{ width: '100%', padding: '10px 14px', border: '1px solid #e2e8f0', borderRadius: 8, fontSize: 14, boxSizing: 'border-box' }}
+                  placeholder="••••••••"
+                  required={!editingUser}
+                />
+              </div>
+
+              {/* Role */}
+              <div>
+                <label style={{ fontSize: 12, fontWeight: 700, color: '#64748b', display: 'block', marginBottom: 6 }}>Role</label>
+                <select
+                  value={formData.role}
+                  onChange={e => setFormData({ ...formData, role: e.target.value })}
+                  style={{ width: '100%', padding: '10px 14px', border: '1px solid #e2e8f0', borderRadius: 8, fontSize: 14, background: 'white', boxSizing: 'border-box' }}
+                >
+                  <option value="user">User</option>
+                  <option value="admin">Admin</option>
+                </select>
+              </div>
+
+              {/* Actions */}
+              <div style={{ display: 'flex', gap: 10, marginTop: 8 }}>
+                <button type="button" onClick={() => { setShowForm(false); setEditingUser(null); setAvatarPreview(null) }} style={{ flex: 1, background: '#f1f5f9', border: 'none', borderRadius: 8, padding: '12px', color: '#64748b', fontWeight: 600, cursor: 'pointer', fontSize: 14 }}>Cancel</button>
+                <button type="submit" style={{ flex: 2, background: 'linear-gradient(135deg,#3b82f6,#6366f1)', border: 'none', borderRadius: 8, padding: '12px', color: 'white', fontWeight: 700, cursor: 'pointer', fontSize: 14 }}>{editingUser ? 'Update' : 'Create'} User</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Users Table */}
+      <div style={{ background: 'white', borderRadius: 16, border: '1px solid #e2e8f0', overflow: 'hidden' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+          <thead>
+            <tr style={{ background: '#f8fafc' }}>
+              {['User', 'Username', 'Email', 'Role', 'Status', 'Created', ''].map(h => (
+                <th key={h} style={{ padding: '12px 20px', textAlign: 'left', fontSize: 11, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 0.8 }}>{h}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {users.length === 0 ? (
+              <tr>
+                <td colSpan={7} style={{ padding: '40px 20px', textAlign: 'center', color: '#94a3b8', fontSize: 14 }}>No users yet. Click "Add User" to create one.</td>
+              </tr>
+            ) : (
+              users.map(user => (
+                <tr key={user.id} style={{ borderTop: '1px solid #f1f5f9' }}>
+                  <td style={{ padding: '14px 20px', display: 'flex', alignItems: 'center', gap: 12 }}>
+                    <div style={{ width: 40, height: 40, borderRadius: '50%', background: user.avatarUrl ? 'none' : 'linear-gradient(135deg,#6366f1,#3b82f6)', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
+                      {user.avatarUrl ? (
+                        <img src={user.avatarUrl} alt={user.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }}/>
+                      ) : (
+                        <span style={{ color: 'white', fontWeight: 900, fontSize: 16 }}>{user.name[0]}</span>
+                      )}
+                    </div>
+                    <span style={{ fontWeight: 700 }}>{user.name}</span>
+                  </td>
+                  <td style={{ padding: '14px 20px', fontSize: 13, color: '#64748b' }}>{user.username}</td>
+                  <td style={{ padding: '14px 20px', fontSize: 13, color: '#64748b' }}>{user.email}</td>
+                  <td style={{ padding: '14px 20px' }}>
+                    <span style={{ background: user.role === 'admin' ? '#eff6ff' : '#f1f5f9', color: user.role === 'admin' ? '#3b82f6' : '#64748b', borderRadius: 6, padding: '4px 10px', fontSize: 11, fontWeight: 700 }}>{user.role}</span>
+                  </td>
+                  <td style={{ padding: '14px 20px' }}>
+                    <button onClick={() => handleToggleActive(user)} style={{ background: user.active ? '#f0fdf4' : '#fef2f2', color: user.active ? '#10b981' : '#ef4444', border: 'none', borderRadius: 6, padding: '4px 10px', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}>
+                      {user.active ? 'Active' : 'Inactive'}
+                    </button>
+                  </td>
+                  <td style={{ padding: '14px 20px', fontSize: 12, color: '#94a3b8' }}>{new Date(user.createdAt).toLocaleDateString()}</td>
+                  <td style={{ padding: '14px 20px' }}>
+                    <div style={{ display: 'flex', gap: 6 }}>
+                      <button onClick={() => handleEdit(user)} style={{ background: '#eff6ff', border: 'none', borderRadius: 6, padding: '6px 10px', cursor: 'pointer', color: '#3b82f6' }} title="Edit">
+                        <Settings size={14}/>
+                      </button>
+                      <button onClick={() => handleDelete(user.id, user.name)} style={{ background: '#fef2f2', border: 'none', borderRadius: 6, padding: '6px 10px', cursor: 'pointer', color: '#ef4444' }} title="Delete">
+                        <Trash2 size={14}/>
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
       </div>
     </div>
   )
