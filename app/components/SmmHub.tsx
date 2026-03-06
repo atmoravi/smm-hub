@@ -162,10 +162,11 @@ const SmmHub = () => {
 
   // ── Actions ──────────────────────────────────────────────────────────────────
   const addLog = () => {
-    if (!minutes || isNaN(minutes) || minutes <= 0) return
-    const workerId = currentRole === 'admin' ? 'admin' : currentWorker?.id
-    const workerName = currentRole === 'admin' ? 'Admin' : currentWorker?.name
-    setLogs(prev => [{ id: generateId(), date: currentDate, minutes: parseInt(minutes), category, note: note.trim(), workerId, workerName }, ...prev])
+    const mins = parseInt(minutes)
+    if (!minutes || isNaN(mins) || mins <= 0) return
+    const workerId = currentRole === 'admin' ? 'admin' : (currentWorker as any)?.id
+    const workerName = currentRole === 'admin' ? 'Admin' : (currentWorker as any)?.name
+    setLogs(prev => [{ id: generateId(), date: currentDate, minutes: mins, category, note: note.trim(), workerId, workerName }, ...prev])
     setMinutes(''); setNote('')
   }
 
@@ -180,8 +181,9 @@ const SmmHub = () => {
   }
 
   const addSalesLog = () => {
-    if (!incomeAmount || isNaN(incomeAmount)) return
-    setSalesLogs(prev => [{ id: generateId(), date: currentDate, amount: parseFloat(incomeAmount) }, ...prev])
+    const amt = parseFloat(incomeAmount)
+    if (!incomeAmount || isNaN(amt)) return
+    setSalesLogs(prev => [{ id: generateId(), date: currentDate, amount: amt }, ...prev])
     setIncomeAmount('')
   }
 
@@ -713,11 +715,13 @@ const SmmHub = () => {
               <p style={{ color: '#64748b', fontSize: 13, margin: '0 0 20px' }}>Use these endpoints and API keys to pipe data from your traffic sources into SMM Hub. Each source has its own key.</p>
             </div>
 
-            {Object.entries(endpoints).map(([source, ep]) => (
+            {Object.entries(endpoints).map(([source, ep]) => {
+              const endpoint = ep as any
+              return (
               <div key={source} style={{ background: 'white', borderRadius: 16, border: '1px solid #e2e8f0', overflow: 'hidden' }}>
                 <div style={{ padding: '18px 24px', borderBottom: '1px solid #f1f5f9', display: 'flex', alignItems: 'center', gap: 12 }}>
-                  <div style={{ width: 10, height: 10, borderRadius: '50%', background: ep.color, boxShadow: `0 0 0 3px ${ep.color}22` }}/>
-                  <span style={{ fontWeight: 800, fontSize: 15 }}>{ep.label}</span>
+                  <div style={{ width: 10, height: 10, borderRadius: '50%', background: endpoint.color, boxShadow: `0 0 0 3px ${endpoint.color}22` }}/>
+                  <span style={{ fontWeight: 800, fontSize: 15 }}>{endpoint.label}</span>
                   <span style={{ background: '#f1f5f9', borderRadius: 6, padding: '3px 10px', fontSize: 11, fontWeight: 700, color: '#64748b', marginLeft: 'auto' }}>POST</span>
                 </div>
                 <div style={{ padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: 14 }}>
@@ -726,9 +730,9 @@ const SmmHub = () => {
                     <label style={{ fontSize: 11, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 0.8, display: 'block', marginBottom: 6 }}>Endpoint URL</label>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                       <code style={{ flex: 1, background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 10, padding: '11px 14px', fontSize: 13, fontFamily: "'DM Mono', monospace", color: '#334155' }}>
-                        https://yourdomain.com{ep.url}
+                        https://yourdomain.com{endpoint.url}
                       </code>
-                      <button onClick={() => { navigator.clipboard.writeText(`https://yourdomain.com${ep.url}`) }} style={{ background: '#f1f5f9', border: 'none', borderRadius: 8, padding: '10px 14px', cursor: 'pointer', color: '#64748b', display: 'flex', alignItems: 'center', gap: 6, fontWeight: 600, fontSize: 12 }}>
+                      <button onClick={() => { navigator.clipboard.writeText(`https://yourdomain.com${endpoint.url}`) }} style={{ background: '#f1f5f9', border: 'none', borderRadius: 8, padding: '10px 14px', cursor: 'pointer', color: '#64748b', display: 'flex', alignItems: 'center', gap: 6, fontWeight: 600, fontSize: 12 }}>
                         <Copy size={13}/> Copy
                       </button>
                     </div>
@@ -739,7 +743,7 @@ const SmmHub = () => {
                     <label style={{ fontSize: 11, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 0.8, display: 'block', marginBottom: 6 }}>API Key</label>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                       <code style={{ flex: 1, background: '#0f172a', border: '1px solid #1e293b', borderRadius: 10, padding: '11px 14px', fontSize: 13, fontFamily: "'DM Mono', monospace", color: '#7dd3fc', letterSpacing: 1 }}>
-                        {visibleKeys[source] ? ep.key : ep.key.slice(0, 10) + '•'.repeat(24)}
+                        {visibleKeys[source] ? endpoint.key : endpoint.key.slice(0, 10) + '•'.repeat(24)}
                       </code>
                       <button onClick={() => setVisibleKeys(prev => ({...prev, [source]: !prev[source]}))} style={{ background: '#f1f5f9', border: 'none', borderRadius: 8, padding: '10px 12px', cursor: 'pointer', color: '#64748b', display: 'flex', alignItems: 'center' }}>
                         {visibleKeys[source] ? <EyeOff size={14}/> : <Eye size={14}/>}
@@ -759,16 +763,16 @@ const SmmHub = () => {
                       <ChevronDown size={13}/> Example payload
                     </summary>
                     <pre style={{ background: '#0f172a', borderRadius: 10, padding: '14px 16px', marginTop: 10, fontSize: 12, fontFamily: "'DM Mono', monospace", color: '#94a3b8', overflowX: 'auto', lineHeight: 1.6 }}>
-{source === 'organicLeads' ? `POST ${ep.url}
-x-api-key: ${ep.key.slice(0,20)}...
+{source === 'organicLeads' ? `POST ${endpoint.url}
+x-api-key: ${endpoint.key.slice(0,20)}...
 
 {
   "date": "2026-03-06",
   "count": 14,
   "source": "instagram_organic",
   "campaign": "Q1 Content Push"
-}` : source === 'paidLeads' ? `POST ${ep.url}
-x-api-key: ${ep.key.slice(0,20)}...
+}` : source === 'paidLeads' ? `POST ${endpoint.url}
+x-api-key: ${endpoint.key.slice(0,20)}...
 
 {
   "date": "2026-03-06",
@@ -776,8 +780,8 @@ x-api-key: ${ep.key.slice(0,20)}...
   "adSpend": 240.00,
   "platform": "meta_ads",
   "campaign": "Spring Sale"
-}` : `POST ${ep.url}
-x-api-key: ${ep.key.slice(0,20)}...
+}` : `POST ${endpoint.url}
+x-api-key: ${endpoint.key.slice(0,20)}...
 
 {
   "date": "2026-03-06",
@@ -789,7 +793,8 @@ x-api-key: ${ep.key.slice(0,20)}...
                   </details>
                 </div>
               </div>
-            ))}
+              )
+            })}
 
             <div style={{ background: '#fffbeb', border: '1px solid #fcd34d', borderRadius: 14, padding: '16px 20px', display: 'flex', gap: 12, alignItems: 'flex-start' }}>
               <AlertCircle size={18} color="#f59e0b" style={{flexShrink:0, marginTop:1}}/>
@@ -809,8 +814,9 @@ x-api-key: ${ep.key.slice(0,20)}...
               <h3 style={{ fontWeight: 900, fontSize: 15, margin: '0 0 18px', display: 'flex', alignItems: 'center', gap: 8 }}><Calendar size={16} color="#3b82f6"/> Monthly Hours</h3>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                 {(() => {
-                  const groups = {}
-                  (isAdmin ? logs : logs.filter(l => l.workerId === currentWorker?.id)).forEach(l => {
+                  const groups: Record<string, number> = {}
+                  const logsToUse = isAdmin ? logs : logs.filter((l: any) => l.workerId === (currentWorker as any)?.id)
+                  logsToUse.forEach((l: any) => {
                     const key = new Date(l.date).toLocaleString('default', { month: 'long', year: 'numeric' })
                     groups[key] = (groups[key] || 0) + l.minutes
                   })
