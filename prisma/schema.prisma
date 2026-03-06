@@ -1,0 +1,70 @@
+// prisma/schema.prisma
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+model Worker {
+  id        String   @id @default(cuid())
+  name      String
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  rates     WorkerRate[]
+  logs      EffortLog[]
+}
+
+model WorkerRate {
+  id       String @id @default(cuid())
+  worker   Worker @relation(fields: [workerId], references: [id], onDelete: Cascade)
+  workerId String
+  category String
+  rate     Float  @default(25)
+
+  @@unique([workerId, category])
+}
+
+model EffortLog {
+  id         String   @id @default(cuid())
+  date       DateTime
+  minutes    Int
+  category   String
+  note       String?
+  worker     Worker   @relation(fields: [workerId], references: [id], onDelete: Cascade)
+  workerId   String
+  createdAt  DateTime @default(now())
+}
+
+model TrafficLog {
+  id            String   @id @default(cuid())
+  date          DateTime
+  campaignName  String?
+  organicLeads  Int      @default(0)
+  paidLeads     Int      @default(0)
+  adSpend       Float    @default(0)
+  source        String?  // e.g. "api" | "manual"
+  createdAt     DateTime @default(now())
+}
+
+model SalesLog {
+  id        String   @id @default(cuid())
+  date      DateTime
+  amount    Float
+  source    String?  // "organic" | "paid" | null
+  orderId   String?
+  createdAt DateTime @default(now())
+}
+
+model ApiKey {
+  id        String   @id @default(cuid())
+  source    String   @unique // "organicLeads" | "paidLeads" | "purchases"
+  key       String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
