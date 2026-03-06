@@ -12,11 +12,13 @@
     "db:seed": "ts-node prisma/seed.ts"
   },
   "dependencies": {
+    "@neondatabase/serverless": "^1.0.2",
+    "@prisma/adapter-neon": "^7.4.2",
     "@prisma/client": "^5.10.0",
-    "next": "^14.1.0",
+    "lucide-react": "^0.263.1",
+    "next": "^16.1.6",
     "react": "^18.2.0",
-    "react-dom": "^18.2.0",
-    "lucide-react": "^0.263.1"
+    "react-dom": "^18.2.0"
   },
   "devDependencies": {
     "@types/node": "^20",
