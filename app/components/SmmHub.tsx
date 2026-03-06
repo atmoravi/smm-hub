@@ -124,17 +124,37 @@ const SmmHub = () => {
   // Key visibility
   const [visibleKeys, setVisibleKeys] = useState({})
   const [copiedKey, setCopiedKey] = useState(null)
+  const [apiKeys, setApiKeys] = useState<{source: string, key: string, createdAt: string, updatedAt: string}[]>()
+  const [keysLoading, setKeysLoading] = useState(true)
 
-  // Persist
+  // Fetch API keys from database (admin only)
+  useEffect(() => {
+    if (authState !== 'app') return
+    const fetchKeys = async () => {
+      try {
+        const res = await fetch('/api/settings/keys')
+        const data = await res.json()
+        setApiKeys(data.keys)
+      } catch (err) {
+        console.error('Failed to fetch API keys:', err)
+      } finally {
+        setKeysLoading(false)
+      }
+    }
+    if (currentRole === 'admin') {
+      fetchKeys()
+    }
+  }, [authState, currentRole])
+
+  // Persist (only non-sensitive data)
   useEffect(() => {
     if (typeof window === 'undefined') return
     localStorage.setItem('smm-workers', JSON.stringify(workers))
     localStorage.setItem('smm-logs2', JSON.stringify(logs))
     localStorage.setItem('smm-traffic2', JSON.stringify(trafficLogs))
     localStorage.setItem('smm-sales2', JSON.stringify(salesLogs))
-    localStorage.setItem('smm-endpoints', JSON.stringify(endpoints))
     localStorage.setItem('smm-settings2', JSON.stringify(settings))
-  }, [workers, logs, trafficLogs, salesLogs, endpoints, settings])
+  }, [workers, logs, trafficLogs, salesLogs, settings])
 
   // ── Auth flow ────────────────────────────────────────────────────────────────
   const handleRoleSelect = (role) => {
@@ -201,7 +221,26 @@ const SmmHub = () => {
   const removeWorker = (id) => setWorkers(prev => prev.filter(w => w.id !== id))
   const updateWorkerRate = (wid, cat, val) => setWorkers(prev => prev.map(w => w.id === wid ? { ...w, rates: { ...w.rates, [cat]: parseFloat(val) || 0 } } : w))
 
-  const rotateKey = (source) => setEndpoints(prev => ({ ...prev, [source]: { ...prev[source], key: generateKey() } }))
+  const rotateKey = async (source) => {
+    try {
+      const res = await fetch('/api/settings/keys/rotate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ source }),
+      })
+      const data = await res.json()
+      if (data.success) {
+        // Refresh keys
+        const keysRes = await fetch('/api/settings/keys')
+        const keysData = await keysRes.json()
+        setApiKeys(keysData.keys)
+        alert('Key rotated! Please update your external services.')
+      }
+    } catch (err) {
+      console.error('Failed to rotate key:', err)
+      alert('Failed to rotate key')
+    }
+  }
 
   const copyKey = (source) => {
     navigator.clipboard.writeText(endpoints[source].key)
@@ -715,64 +754,71 @@ const SmmHub = () => {
               <p style={{ color: '#64748b', fontSize: 13, margin: '0 0 20px' }}>Use these endpoints and API keys to pipe data from your traffic sources into SMM Hub. Each source has its own key.</p>
             </div>
 
-            {Object.entries(endpoints).map(([source, ep]) => {
-              const endpoint = ep as any
-              return (
-              <div key={source} style={{ background: 'white', borderRadius: 16, border: '1px solid #e2e8f0', overflow: 'hidden' }}>
-                <div style={{ padding: '18px 24px', borderBottom: '1px solid #f1f5f9', display: 'flex', alignItems: 'center', gap: 12 }}>
-                  <div style={{ width: 10, height: 10, borderRadius: '50%', background: endpoint.color, boxShadow: `0 0 0 3px ${endpoint.color}22` }}/>
-                  <span style={{ fontWeight: 800, fontSize: 15 }}>{endpoint.label}</span>
-                  <span style={{ background: '#f1f5f9', borderRadius: 6, padding: '3px 10px', fontSize: 11, fontWeight: 700, color: '#64748b', marginLeft: 'auto' }}>POST</span>
-                </div>
-                <div style={{ padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: 14 }}>
-                  {/* Endpoint URL */}
-                  <div>
-                    <label style={{ fontSize: 11, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 0.8, display: 'block', marginBottom: 6 }}>Endpoint URL</label>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <code style={{ flex: 1, background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 10, padding: '11px 14px', fontSize: 13, fontFamily: "'DM Mono', monospace", color: '#334155' }}>
-                        https://yourdomain.com{endpoint.url}
-                      </code>
-                      <button onClick={() => { navigator.clipboard.writeText(`https://yourdomain.com${endpoint.url}`) }} style={{ background: '#f1f5f9', border: 'none', borderRadius: 8, padding: '10px 14px', cursor: 'pointer', color: '#64748b', display: 'flex', alignItems: 'center', gap: 6, fontWeight: 600, fontSize: 12 }}>
-                        <Copy size={13}/> Copy
-                      </button>
+            {keysLoading ? (
+              <div style={{ textAlign: 'center', padding: 40, color: '#94a3b8' }}>Loading API keys...</div>
+            ) : apiKeys?.length ? (
+              apiKeys.map(({ source, key, createdAt, updatedAt }) => {
+                const ep = {
+                  organicLeads: { url: '/api/leads/organic', label: 'Organic Leads', color: '#10b981' },
+                  paidLeads: { url: '/api/leads/paid', label: 'Paid Leads', color: '#3b82f6' },
+                  purchases: { url: '/api/purchases', label: 'Purchases', color: '#f59e0b' },
+                }[source]
+                return (
+                  <div key={source} style={{ background: 'white', borderRadius: 16, border: '1px solid #e2e8f0', overflow: 'hidden' }}>
+                    <div style={{ padding: '18px 24px', borderBottom: '1px solid #f1f5f9', display: 'flex', alignItems: 'center', gap: 12 }}>
+                      <div style={{ width: 10, height: 10, borderRadius: '50%', background: ep.color, boxShadow: `0 0 0 3px ${ep.color}22` }}/>
+                      <span style={{ fontWeight: 800, fontSize: 15 }}>{ep.label}</span>
+                      <span style={{ background: '#f1f5f9', borderRadius: 6, padding: '3px 10px', fontSize: 11, fontWeight: 700, color: '#64748b', marginLeft: 'auto' }}>POST</span>
                     </div>
-                  </div>
+                    <div style={{ padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: 14 }}>
+                      {/* Endpoint URL */}
+                      <div>
+                        <label style={{ fontSize: 11, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 0.8, display: 'block', marginBottom: 6 }}>Endpoint URL</label>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <code style={{ flex: 1, background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 10, padding: '11px 14px', fontSize: 13, fontFamily: "'DM Mono', monospace", color: '#334155' }}>
+                            {typeof window !== 'undefined' ? window.location.origin : ''}{ep.url}
+                          </code>
+                          <button onClick={() => { navigator.clipboard.writeText(`${typeof window !== 'undefined' ? window.location.origin : ''}${ep.url}`) }} style={{ background: '#f1f5f9', border: 'none', borderRadius: 8, padding: '10px 14px', cursor: 'pointer', color: '#64748b', display: 'flex', alignItems: 'center', gap: 6, fontWeight: 600, fontSize: 12 }}>
+                            <Copy size={13}/> Copy
+                          </button>
+                        </div>
+                      </div>
 
-                  {/* API Key */}
-                  <div>
-                    <label style={{ fontSize: 11, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 0.8, display: 'block', marginBottom: 6 }}>API Key</label>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <code style={{ flex: 1, background: '#0f172a', border: '1px solid #1e293b', borderRadius: 10, padding: '11px 14px', fontSize: 13, fontFamily: "'DM Mono', monospace", color: '#7dd3fc', letterSpacing: 1 }}>
-                        {visibleKeys[source] ? endpoint.key : endpoint.key.slice(0, 10) + '•'.repeat(24)}
-                      </code>
-                      <button onClick={() => setVisibleKeys(prev => ({...prev, [source]: !prev[source]}))} style={{ background: '#f1f5f9', border: 'none', borderRadius: 8, padding: '10px 12px', cursor: 'pointer', color: '#64748b', display: 'flex', alignItems: 'center' }}>
-                        {visibleKeys[source] ? <EyeOff size={14}/> : <Eye size={14}/>}
-                      </button>
-                      <button onClick={() => copyKey(source)} style={{ background: copiedKey === source ? '#f0fdf4' : '#f1f5f9', border: 'none', borderRadius: 8, padding: '10px 14px', cursor: 'pointer', color: copiedKey === source ? '#10b981' : '#64748b', display: 'flex', alignItems: 'center', gap: 6, fontWeight: 600, fontSize: 12 }}>
-                        {copiedKey === source ? <><Check size={13}/> Copied</> : <><Copy size={13}/> Copy</>}
-                      </button>
-                      <button onClick={() => rotateKey(source)} title="Rotate key" style={{ background: '#fff7ed', border: 'none', borderRadius: 8, padding: '10px 12px', cursor: 'pointer', color: '#f59e0b', display: 'flex', alignItems: 'center' }}>
-                        <RefreshCw size={14}/>
-                      </button>
-                    </div>
-                  </div>
+                      {/* API Key */}
+                      <div>
+                        <label style={{ fontSize: 11, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 0.8, display: 'block', marginBottom: 6 }}>API Key</label>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <code style={{ flex: 1, background: '#0f172a', border: '1px solid #1e293b', borderRadius: 10, padding: '11px 14px', fontSize: 13, fontFamily: "'DM Mono', monospace", color: '#7dd3fc', letterSpacing: 1 }}>
+                            {visibleKeys[source] ? key : key.slice(0, 10) + '•'.repeat(24)}
+                          </code>
+                          <button onClick={() => setVisibleKeys(prev => ({...prev, [source]: !prev[source]}))} style={{ background: '#f1f5f9', border: 'none', borderRadius: 8, padding: '10px 12px', cursor: 'pointer', color: '#64748b', display: 'flex', alignItems: 'center' }}>
+                            {visibleKeys[source] ? <EyeOff size={14}/> : <Eye size={14}/>}
+                          </button>
+                          <button onClick={() => { navigator.clipboard.writeText(key); setCopiedKey(source); setTimeout(() => setCopiedKey(null), 2000) }} style={{ background: copiedKey === source ? '#f0fdf4' : '#f1f5f9', border: 'none', borderRadius: 8, padding: '10px 14px', cursor: 'pointer', color: copiedKey === source ? '#10b981' : '#64748b', display: 'flex', alignItems: 'center', gap: 6, fontWeight: 600, fontSize: 12 }}>
+                            {copiedKey === source ? <><Check size={13}/> Copied</> : <><Copy size={13}/> Copy</>}
+                          </button>
+                          <button onClick={() => rotateKey(source)} title="Rotate key" style={{ background: '#fff7ed', border: 'none', borderRadius: 8, padding: '10px 12px', cursor: 'pointer', color: '#f59e0b', display: 'flex', alignItems: 'center' }}>
+                            <RefreshCw size={14}/>
+                          </button>
+                        </div>
+                        <p style={{ fontSize: 11, color: '#94a3b8', marginTop: 6 }}>Last updated: {new Date(updatedAt).toLocaleDateString()}</p>
+                      </div>
 
-                  {/* Example payload */}
-                  <details style={{ marginTop: 4 }}>
-                    <summary style={{ fontSize: 12, fontWeight: 700, color: '#94a3b8', cursor: 'pointer', userSelect: 'none', display: 'flex', alignItems: 'center', gap: 6 }}>
-                      <ChevronDown size={13}/> Example payload
-                    </summary>
-                    <pre style={{ background: '#0f172a', borderRadius: 10, padding: '14px 16px', marginTop: 10, fontSize: 12, fontFamily: "'DM Mono', monospace", color: '#94a3b8', overflowX: 'auto', lineHeight: 1.6 }}>
-{source === 'organicLeads' ? `POST ${endpoint.url}
-x-api-key: ${endpoint.key.slice(0,20)}...
+                      {/* Example payload */}
+                      <details style={{ marginTop: 4 }}>
+                        <summary style={{ fontSize: 12, fontWeight: 700, color: '#94a3b8', cursor: 'pointer', userSelect: 'none', display: 'flex', alignItems: 'center', gap: 6 }}>
+                          <ChevronDown size={13}/> Example payload
+                        </summary>
+                        <pre style={{ background: '#0f172a', borderRadius: 10, padding: '14px 16px', marginTop: 10, fontSize: 12, fontFamily: "'DM Mono', monospace", color: '#94a3b8', overflowX: 'auto', lineHeight: 1.6 }}>
+{source === 'organicLeads' ? `POST ${ep.url}
+x-api-key: ${key.slice(0,20)}...
 
 {
   "date": "2026-03-06",
   "count": 14,
-  "source": "instagram_organic",
   "campaign": "Q1 Content Push"
-}` : source === 'paidLeads' ? `POST ${endpoint.url}
-x-api-key: ${endpoint.key.slice(0,20)}...
+}` : source === 'paidLeads' ? `POST ${ep.url}
+x-api-key: ${key.slice(0,20)}...
 
 {
   "date": "2026-03-06",
@@ -780,8 +826,8 @@ x-api-key: ${endpoint.key.slice(0,20)}...
   "adSpend": 240.00,
   "platform": "meta_ads",
   "campaign": "Spring Sale"
-}` : `POST ${endpoint.url}
-x-api-key: ${endpoint.key.slice(0,20)}...
+}` : `POST ${ep.url}
+x-api-key: ${key.slice(0,20)}...
 
 {
   "date": "2026-03-06",
@@ -789,12 +835,15 @@ x-api-key: ${endpoint.key.slice(0,20)}...
   "source": "organic" | "paid",
   "orderId": "ORD-9182"
 }`}
-                    </pre>
-                  </details>
-                </div>
-              </div>
-              )
-            })}
+                        </pre>
+                      </details>
+                    </div>
+                  </div>
+                )
+              })
+            ) : (
+              <div style={{ textAlign: 'center', padding: 40, color: '#94a3b8' }}>No API keys found. Please run the seed script.</div>
+            )}
 
             <div style={{ background: '#fffbeb', border: '1px solid #fcd34d', borderRadius: 14, padding: '16px 20px', display: 'flex', gap: 12, alignItems: 'flex-start' }}>
               <AlertCircle size={18} color="#f59e0b" style={{flexShrink:0, marginTop:1}}/>
