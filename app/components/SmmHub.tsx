@@ -6,7 +6,7 @@ import {
   Settings, User, Globe, Zap, Layers, History, PieChart,
   Users, Key, Eye, EyeOff, Copy, Check, Shield, LogOut,
   ArrowUpRight, ArrowDownRight, Minus, RefreshCw, ChevronDown,
-  Activity, Target, AlertCircle, Lock, FileText
+  Activity, Target, AlertCircle, Lock, FileText, Archive
 } from 'lucide-react'
 import PostsTab from './PostsTab'
 
@@ -102,7 +102,7 @@ const SmmHub = () => {
 
   // Core state
   const [activeTab, setActiveTab] = useState('dashboard')
-  const [settingsSubTab, setSettingsSubTab] = useState<'api' | 'users' | 'general'>('api') // Settings sub-tabs
+  const [settingsSubTab, setSettingsSubTab] = useState<'api' | 'users' | 'general' | 'archive'>('api') // Settings sub-tabs
 
   const [workers, setWorkers] = useState(() => {
     if (typeof window === 'undefined') return []
@@ -572,11 +572,14 @@ const SmmHub = () => {
   // ── Main App ─────────────────────────────────────────────────────────────────
   const isAdmin = currentRole === 'admin'
   const TABS = isAdmin
-    ? ['dashboard', 'content', 'traffic', 'workers', 'settings', 'history']
+    ? ['dashboard', 'content', 'traffic', 'settings', 'history']
     : ['effort', 'content', 'traffic', 'history']
 
   const tabLabels = { dashboard: 'Dashboard', content: 'Content', traffic: 'Traffic', workers: 'Workers', settings: 'Settings', history: 'History', effort: 'Log Effort' }
   const tabIcons = { dashboard: <BarChart3 size={14}/>, content: <FileText size={14}/>, traffic: <Globe size={14}/>, workers: <Users size={14}/>, settings: <Settings size={14}/>, history: <History size={14}/>, effort: <Layers size={14}/> }
+
+  // Content sub-tabs: actual vs archive
+  const [contentSubTab, setContentSubTab] = useState<'actual' | 'archive'>('actual')
 
   return (
     <div style={{ minHeight: '100vh', background: '#f8fafc', fontFamily: "'DM Sans', sans-serif", color: '#0f172a' }}>
@@ -878,7 +881,69 @@ const SmmHub = () => {
 
         {/* ── CONTENT (Posts Management) ── */}
         {activeTab === 'content' && (
-          <PostsTab workers={workersList} isAdmin={isAdmin} />
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+            {/* Content sub-tabs */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <button
+                onClick={() => setContentSubTab('actual')}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 6,
+                  padding: '8px 16px',
+                  borderRadius: 8,
+                  border: contentSubTab === 'actual' ? 'none' : '1px solid #e2e8f0',
+                  background: contentSubTab === 'actual' ? '#0f172a' : 'white',
+                  color: contentSubTab === 'actual' ? 'white' : '#64748b',
+                  fontWeight: 700,
+                  fontSize: 13,
+                  cursor: 'pointer',
+                }}
+              >
+                <FileText size={14}/> Active Posts
+              </button>
+              <button
+                onClick={() => setContentSubTab('archive')}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 6,
+                  padding: '8px 16px',
+                  borderRadius: 8,
+                  border: contentSubTab === 'archive' ? 'none' : '1px solid #e2e8f0',
+                  background: contentSubTab === 'archive' ? '#0f172a' : 'white',
+                  color: contentSubTab === 'archive' ? 'white' : '#64748b',
+                  fontWeight: 700,
+                  fontSize: 13,
+                  cursor: 'pointer',
+                }}
+              >
+                <Archive size={14}/> Archive
+              </button>
+              {contentSubTab === 'archive' && (
+                <button
+                  onClick={() => setActiveTab('settings')}
+                  style={{
+                    marginLeft: 'auto',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 6,
+                    padding: '8px 14px',
+                    borderRadius: 8,
+                    border: '1px solid #e2e8f0',
+                    background: 'white',
+                    color: '#64748b',
+                    fontWeight: 600,
+                    fontSize: 12,
+                    cursor: 'pointer',
+                  }}
+                >
+                  <Settings size={12}/> Archive Settings
+                </button>
+              )}
+            </div>
+            <PostsTab workers={workersList} isAdmin={isAdmin} archiveMode={contentSubTab} />
+          </div>
         )}
 
         {/* ── EFFORT LOG (worker) ── */}
@@ -1080,6 +1145,26 @@ const SmmHub = () => {
               >
                 <Settings size={16}/> General
               </button>
+              <button
+                onClick={() => setSettingsSubTab('archive')}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  padding: '12px 20px',
+                  borderRadius: '10px 10px 0 0',
+                  border: 'none',
+                  background: settingsSubTab === 'archive' ? 'white' : 'transparent',
+                  color: settingsSubTab === 'archive' ? '#3b82f6' : '#64748b',
+                  fontWeight: settingsSubTab === 'archive' ? 700 : 500,
+                  fontSize: 14,
+                  cursor: 'pointer',
+                  borderBottom: settingsSubTab === 'archive' ? '2px solid #3b82f6' : '2px solid transparent',
+                  marginBottom: -1,
+                }}
+              >
+                <Archive size={16}/> Archive Settings
+              </button>
             </div>
 
             {/* API Keys Tab */}
@@ -1196,6 +1281,9 @@ x-api-key: ${key.slice(0,20)}...
 
             {/* General Settings Tab */}
             {settingsSubTab === 'general' && <GeneralSettings />}
+
+            {/* Archive Settings Tab */}
+            {settingsSubTab === 'archive' && <ArchiveSettings />}
           </div>
         )}
 
@@ -1969,6 +2057,177 @@ const GeneralSettings = () => {
         <p style={{ fontSize: 11, color: '#94a3b8', marginTop: 12 }}>
           Note: Individual workers can have different payment currencies in their user settings.
         </p>
+      </div>
+    </div>
+  )
+}
+
+// ─── Archive Settings Component ────────────────────────────────────────────────
+const ArchiveSettings = () => {
+  const [posts, setPosts] = useState<any[]>(() => {
+    if (typeof window === 'undefined') return []
+    const saved = localStorage.getItem('smm-posts')
+    return saved ? JSON.parse(saved) : []
+  })
+  const [archiveCutoffMonths, setArchiveCutoffMonths] = useState(6)
+  const [isCleaning, setIsCleaning] = useState(false)
+  const [preview, setPreview] = useState<{total: number, toClean: number, posts: any[]}>({total: 0, toClean: 0, posts: []})
+
+  const calculateArchiveCutoff = () => {
+    const cutoff = new Date()
+    cutoff.setMonth(cutoff.getMonth() - archiveCutoffMonths)
+    return cutoff.toISOString().split('T')[0]
+  }
+
+  useEffect(() => {
+    const cutoff = calculateArchiveCutoff()
+    const archived = posts.filter(p => p.scheduledDate < cutoff)
+    setPreview({
+      total: posts.length,
+      toClean: archived.length,
+      posts: archived.sort((a, b) => new Date(b.scheduledDate).getTime() - new Date(a.scheduledDate).getTime()),
+    })
+  }, [posts, archiveCutoffMonths])
+
+  const handleCleanArchive = () => {
+    if (!confirm(`This will remove details from ${preview.toClean} archived posts but keep their stats (impressions, leads, time spent). Continue?`)) return
+
+    setIsCleaning(true)
+    const cutoff = calculateArchiveCutoff()
+
+    const cleaned = posts.map(p => {
+      if (p.scheduledDate < cutoff) {
+        // Keep stats, remove details
+        return {
+          ...p,
+          title: '[Archived] ' + (p.title || 'Untitled'),
+          caption: '',
+          tags: [],
+          notes: `Details cleaned on ${new Date().toLocaleDateString()}. Stats preserved.`,
+        }
+      }
+      return p
+    })
+
+    setPosts(cleaned)
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('smm-posts', JSON.stringify(cleaned))
+    }
+    setIsCleaning(false)
+    alert(`Cleaned ${preview.toClean} archived posts. Details removed, stats preserved.`)
+  }
+
+  const cutoffDate = calculateArchiveCutoff()
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+      <div>
+        <h2 style={{ fontWeight: 900, fontSize: 20, margin: '0 0 6px' }}>Archive Settings</h2>
+        <p style={{ color: '#64748b', fontSize: 13, margin: '0 0 20px' }}>Manage archived posts and clean up old data while preserving performance stats</p>
+      </div>
+
+      {/* Archive cutoff */}
+      <div style={{ background: 'white', borderRadius: 16, padding: '24px', border: '1px solid #e2e8f0', maxWidth: 500 }}>
+        <h3 style={{ fontWeight: 900, fontSize: 16, margin: '0 0 16px', display: 'flex', alignItems: 'center', gap: 8 }}>
+          <Archive size={18} color="#6366f1"/> Archive Cutoff
+        </h3>
+        <p style={{ fontSize: 13, color: '#64748b', margin: '0 0 16px' }}>
+          Posts scheduled before this period will be moved to the Archive tab.
+        </p>
+        <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+          <select
+            value={archiveCutoffMonths}
+            onChange={e => setArchiveCutoffMonths(parseInt(e.target.value))}
+            style={{ padding: '10px 14px', border: '1px solid #e2e8f0', borderRadius: 8, fontSize: 14, background: 'white' }}
+          >
+            <option value={3}>3 months</option>
+            <option value={6}>6 months</option>
+            <option value={9}>9 months</option>
+            <option value={12}>12 months</option>
+          </select>
+          <span style={{ fontSize: 13, color: '#64748b' }}>→ Cutoff: <strong style={{ color: '#0f172a' }}>{cutoffDate}</strong></span>
+        </div>
+      </div>
+
+      {/* Archive preview */}
+      <div style={{ background: 'white', borderRadius: 16, padding: '24px', border: '1px solid #e2e8f0' }}>
+        <h3 style={{ fontWeight: 900, fontSize: 16, margin: '0 0 16px', display: 'flex', alignItems: 'center', gap: 8 }}>
+          <BarChart3 size={18} color="#10b981"/> Archive Preview
+        </h3>
+        <div style={{ display: 'flex', gap: 16, marginBottom: 16 }}>
+          <div style={{ background: '#f8fafc', borderRadius: 12, padding: '14px 18px', flex: 1 }}>
+            <p style={{ fontSize: 11, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', margin: '0 0 4px' }}>Total Posts</p>
+            <p style={{ fontSize: 24, fontWeight: 900, color: '#0f172a', margin: 0 }}>{preview.total}</p>
+          </div>
+          <div style={{ background: '#fef3c7', borderRadius: 12, padding: '14px 18px', flex: 1 }}>
+            <p style={{ fontSize: 11, fontWeight: 700, color: '#92400e', textTransform: 'uppercase', margin: '0 0 4px' }}>Archived</p>
+            <p style={{ fontSize: 24, fontWeight: 900, color: '#b45309', margin: 0 }}>{preview.toClean}</p>
+          </div>
+        </div>
+
+        {preview.toClean > 0 ? (
+          <>
+            <p style={{ fontSize: 13, color: '#64748b', margin: '0 0 12px' }}>Posts to be cleaned:</p>
+            <div style={{ maxHeight: 200, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {preview.posts.slice(0, 10).map(p => (
+                <div key={p.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 12px', background: '#f8fafc', borderRadius: 8, fontSize: 12 }}>
+                  <span style={{ color: '#64748b' }}>{p.scheduledDate}</span>
+                  <span style={{ fontWeight: 600, color: '#0f172a' }}>{p.title || 'Untitled'}</span>
+                  <span style={{ color: '#94a3b8' }}>{p.platform}</span>
+                </div>
+              ))}
+              {preview.toClean > 10 && (
+                <p style={{ fontSize: 12, color: '#94a3b8', textAlign: 'center', padding: 8 }}>+{preview.toClean - 10} more</p>
+              )}
+            </div>
+
+            <div style={{ marginTop: 20, padding: '14px 16px', background: '#fff7ed', border: '1px solid #fed7aa', borderRadius: 12 }}>
+              <p style={{ fontSize: 12, color: '#92400e', margin: '0 0 8px', fontWeight: 700 }}>⚠️ What gets cleaned:</p>
+              <ul style={{ fontSize: 12, color: '#92400e', margin: 0, paddingLeft: 20, lineHeight: 1.6 }}>
+                <li>Post titles (prefixed with "[Archived]")</li>
+                <li>Captions and copy</li>
+                <li>Tags</li>
+                <li>Notes and work logs</li>
+              </ul>
+              <p style={{ fontSize: 12, color: '#059669', margin: '8px 0 0', fontWeight: 700 }}>✓ What's preserved:</p>
+              <ul style={{ fontSize: 12, color: '#059669', margin: 0, paddingLeft: 20, lineHeight: 1.6 }}>
+                <li>Impressions and organic leads</li>
+                <li>Time spent / work hours</li>
+                <li>Platform and content type</li>
+                <li>Scheduled/published dates</li>
+                <li>CVR and performance metrics</li>
+              </ul>
+            </div>
+
+            <button
+              onClick={handleCleanArchive}
+              disabled={isCleaning}
+              style={{
+                marginTop: 16,
+                background: isCleaning ? '#cbd5e1' : 'linear-gradient(135deg,#ef4444,#dc2626)',
+                border: 'none',
+                borderRadius: 10,
+                padding: '12px 24px',
+                color: 'white',
+                fontWeight: 700,
+                cursor: isCleaning ? 'not-allowed' : 'pointer',
+                fontSize: 14,
+                display: 'flex',
+                alignItems: 'center',
+                gap: 8,
+                opacity: isCleaning ? 0.7 : 1,
+              }}
+            >
+              {isCleaning ? <><RefreshCw size={16} className="animate-spin"/> Cleaning...</> : <><Trash2 size={16}/> Clean Archive Details</>}
+            </button>
+          </>
+        ) : (
+          <div style={{ textAlign: 'center', padding: 40, color: '#94a3b8' }}>
+            <Archive size={48} style={{ marginBottom: 12, opacity: 0.5 }}/>
+            <p style={{ fontSize: 14, fontWeight: 600 }}>No posts to archive yet</p>
+            <p style={{ fontSize: 12, marginTop: 4 }}>Posts older than {archiveCutoffMonths} months will appear here</p>
+          </div>
+        )}
       </div>
     </div>
   )

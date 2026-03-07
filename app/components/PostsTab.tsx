@@ -3,7 +3,7 @@
 import React, { useState, useMemo } from 'react'
 import {
   Plus, Calendar, Clock, Check, X, Trash2, Filter, ChevronDown,
-  ChevronRight, Edit3, BarChart2, Target, FileText, Tag
+  ChevronRight, Edit3, BarChart2, Target, FileText, Tag, Archive
 } from 'lucide-react'
 
 const PLATFORMS = ['Instagram', 'TikTok', 'LinkedIn', 'Facebook', 'X/Twitter', 'YouTube']
@@ -422,9 +422,10 @@ const inputStyle: React.CSSProperties = { width: '100%', padding: '10px 12px', b
 interface PostsTabProps {
   workers?: Worker[]
   isAdmin?: boolean
+  archiveMode?: 'actual' | 'archive'
 }
 
-const PostsTab: React.FC<PostsTabProps> = ({ workers = [], isAdmin = false }) => {
+const PostsTab: React.FC<PostsTabProps> = ({ workers = [], isAdmin = false, archiveMode = 'actual' }) => {
   const [posts, setPosts] = useState<Post[]>(() => {
     if (typeof window === 'undefined') return SAMPLE_POSTS
     const saved = localStorage.getItem('smm-posts')
@@ -459,11 +460,34 @@ const PostsTab: React.FC<PostsTabProps> = ({ workers = [], isAdmin = false }) =>
     setModalPost(null)
   }
 
-  const filtered = useMemo(() => posts.filter(p => {
-    if (filterPlatform !== 'All' && p.platform !== filterPlatform) return false
-    if (filterStatus !== 'All' && p.status !== filterStatus) return false
-    return true
-  }), [posts, filterPlatform, filterStatus])
+  // Calculate cutoff date for archive (6 months ago)
+  const archiveCutoffDate = useMemo(() => {
+    const cutoff = new Date()
+    cutoff.setMonth(cutoff.getMonth() - 6)
+    return cutoff.toISOString().split('T')[0]
+  }, [])
+
+  const filtered = useMemo(() => {
+    let filteredPosts = posts.filter(p => {
+      if (filterPlatform !== 'All' && p.platform !== filterPlatform) return false
+      if (filterStatus !== 'All' && p.status !== filterStatus) return false
+      return true
+    })
+
+    // Filter by view mode: actual vs archive (based on scheduled date)
+    if (archiveMode === 'actual') {
+      filteredPosts = filteredPosts.filter(p => p.scheduledDate >= archiveCutoffDate)
+    } else {
+      filteredPosts = filteredPosts.filter(p => p.scheduledDate < archiveCutoffDate)
+    }
+
+    // Sort archive by date descending (newest first)
+    if (archiveMode === 'archive') {
+      filteredPosts.sort((a, b) => new Date(b.scheduledDate).getTime() - new Date(a.scheduledDate).getTime())
+    }
+
+    return filteredPosts
+  }, [posts, filterPlatform, filterStatus, archiveMode, archiveCutoffDate])
 
   const stats = useMemo(() => {
     const published = posts.filter(p => p.status === 'Results In')
@@ -481,6 +505,22 @@ const PostsTab: React.FC<PostsTabProps> = ({ workers = [], isAdmin = false }) =>
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+      {/* Archive banner */}
+      {archiveMode === 'archive' && (
+        <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 12, padding: '14px 18px', display: 'flex', alignItems: 'center', gap: 12 }}>
+          <div style={{ width: 40, height: 40, borderRadius: '50%', background: '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+            <Archive size={20} color="#64748b"/>
+          </div>
+          <div style={{ flex: 1 }}>
+            <p style={{ fontSize: 13, fontWeight: 700, color: '#0f172a', margin: '0 0 2px' }}>Archived Posts</p>
+            <p style={{ fontSize: 12, color: '#64748b', margin: 0 }}>Posts scheduled before <strong>{archiveCutoffDate}</strong> (6+ months ago). Stats preserved, details can be cleaned.</p>
+          </div>
+          <div style={{ fontSize: 12, color: '#94a3b8', fontWeight: 600 }}>
+            {filtered.length} post{filtered.length !== 1 ? 's' : ''}
+          </div>
+        </div>
+      )}
+
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 12 }}>
         {[
           { label: 'Total Posts', value: stats.totalPosts, color: '#0f172a' },
