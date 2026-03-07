@@ -32,7 +32,7 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json()
-    const { name, username, email, password, role = 'user', avatarUrl } = body
+    const { name, username, email, password, role = 'user', avatarUrl, hourlyRate = 25 } = body
 
     // Validation
     if (!name || !username || !email || !password) {
@@ -68,6 +68,7 @@ export async function POST(req: NextRequest) {
         password: hashedPassword,
         role,
         avatarUrl: avatarUrl || null,
+        hourlyRate: parseFloat(hourlyRate) || 25,
       },
       select: {
         id: true,
@@ -77,6 +78,7 @@ export async function POST(req: NextRequest) {
         avatarUrl: true,
         role: true,
         active: true,
+        hourlyRate: true,
         createdAt: true,
       },
     })

@@ -10,34 +10,15 @@ datasource db {
   directUrl = env("DIRECT_URL")
 }
 
-model Worker {
-  id        String   @id @default(cuid())
-  name      String
-  active    Boolean  @default(true)
-  createdAt DateTime @default(now())
-
-  rates     WorkerRate[]
-  logs      EffortLog[]
-}
-
-model WorkerRate {
-  id       String @id @default(cuid())
-  worker   Worker @relation(fields: [workerId], references: [id], onDelete: Cascade)
-  workerId String
-  category String
-  rate     Float  @default(25)
-
-  @@unique([workerId, category])
-}
-
 model EffortLog {
   id         String   @id @default(cuid())
   date       DateTime
   minutes    Int
   category   String
   note       String?
-  worker     Worker   @relation(fields: [workerId], references: [id], onDelete: Cascade)
-  workerId   String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId     String
+  categoryRate Float  @default(25) // Rate at time of logging
   createdAt  DateTime @default(now())
 }
 
@@ -78,6 +59,9 @@ model User {
   avatarUrl String?  // Profile picture URL
   role      String   @default("user") // "admin" | "user"
   active    Boolean  @default(true)
+  hourlyRate Float   @default(25) // Default hourly rate for workers
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  effortLogs EffortLog[]
 }

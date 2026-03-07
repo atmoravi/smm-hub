@@ -87,11 +87,17 @@ const DualChart = ({ series, labels, height = 160 }: { series: any[], labels: st
 // ─── App ──────────────────────────────────────────────────────────────────────
 const SmmHub = () => {
   // Auth
-  const [authState, setAuthState] = useState('select') // 'select' | 'pin' | 'worker-select' | 'app'
+  const [authState, setAuthState] = useState('select') // 'select' | 'pin' | 'worker-select' | 'worker-login' | 'app'
   const [pinInput, setPinInput] = useState('')
   const [pinError, setPinError] = useState(false)
   const [currentRole, setCurrentRole] = useState(null) // 'admin' | worker id
   const [currentWorker, setCurrentWorker] = useState(null)
+  const [workerLoginMode, setWorkerLoginMode] = useState<'select' | 'password'>('select')
+  const [workersList, setWorkersList] = useState<any[]>([])
+  const [workersLoading, setWorkersLoading] = useState(false)
+  const [loginUsername, setLoginUsername] = useState('')
+  const [loginPassword, setLoginPassword] = useState('')
+  const [loginError, setLoginError] = useState('')
 
   // Core state
   const [activeTab, setActiveTab] = useState('dashboard')
@@ -151,16 +157,37 @@ const SmmHub = () => {
   useEffect(() => {
     if (typeof window === 'undefined') return
     localStorage.setItem('smm-workers', JSON.stringify(workers))
-    localStorage.setItem('smm-logs2', JSON.stringify(logs))
     localStorage.setItem('smm-traffic2', JSON.stringify(trafficLogs))
     localStorage.setItem('smm-sales2', JSON.stringify(salesLogs))
     localStorage.setItem('smm-settings2', JSON.stringify(settings))
-  }, [workers, logs, trafficLogs, salesLogs, settings])
+  }, [workers, trafficLogs, salesLogs, settings])
+  
+  // Fetch effort logs when worker logs in
+  useEffect(() => {
+    if (currentWorker && authState === 'app') {
+      fetchEffortLogs()
+    }
+  }, [currentWorker, authState])
 
   // ── Auth flow ────────────────────────────────────────────────────────────────
   const handleRoleSelect = (role) => {
     if (role === 'admin') { setCurrentRole('admin'); setAuthState('pin') }
-    else { setCurrentRole('worker'); setAuthState('worker-select') }
+    else { 
+      setCurrentRole('worker')
+      // Fetch workers from database
+      setWorkersLoading(true)
+      fetch('/api/auth/workers')
+        .then(res => res.json())
+        .then(data => {
+          setWorkersList(data.workers || [])
+          setWorkersLoading(false)
+          setAuthState('worker-select')
+        })
+        .catch(() => {
+          setWorkersLoading(false)
+          setAuthState('worker-select')
+        })
+    }
   }
 
   const handlePinSubmit = () => {
@@ -169,8 +196,37 @@ const SmmHub = () => {
   }
 
   const handleWorkerSelect = (worker) => {
-    setCurrentWorker(worker)
-    setAuthState('app')
+    if (workerLoginMode === 'select') {
+      // Show password login option
+      setWorkerLoginMode('password')
+    } else {
+      // Login with username/password
+      setLoginUsername(worker.username)
+      setCurrentWorker(worker)
+      setAuthState('worker-login')
+    }
+  }
+
+  const handleWorkerPasswordLogin = async () => {
+    setLoginError('')
+    try {
+      const res = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username: loginUsername, password: loginPassword }),
+      })
+      const data = await res.json()
+      if (res.ok && data.user) {
+        setCurrentWorker(data.user)
+        setAuthState('app')
+        setLoginPassword('')
+        setLoginError('')
+      } else {
+        setLoginError(data.error || 'Login failed')
+      }
+    } catch (err) {
+      setLoginError('Login failed. Please try again.')
+    }
   }
 
   const logout = () => {
@@ -179,16 +235,57 @@ const SmmHub = () => {
     setCurrentWorker(null)
     setPinInput('')
     setActiveTab('dashboard')
+    setWorkerLoginMode('select')
+    setLoginUsername('')
+    setLoginPassword('')
+    setLoginError('')
   }
 
   // ── Actions ──────────────────────────────────────────────────────────────────
-  const addLog = () => {
+  const addLog = async () => {
     const mins = parseInt(minutes)
     if (!minutes || isNaN(mins) || mins <= 0) return
-    const workerId = currentRole === 'admin' ? 'admin' : (currentWorker as any)?.id
-    const workerName = currentRole === 'admin' ? 'Admin' : (currentWorker as any)?.name
-    setLogs(prev => [{ id: generateId(), date: currentDate, minutes: mins, category, note: note.trim(), workerId, workerName }, ...prev])
-    setMinutes(''); setNote('')
+    if (!currentWorker) return
+    
+    try {
+      const res = await fetch('/api/effort', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId: currentWorker.id,
+          date: currentDate,
+          minutes: mins,
+          category,
+          note: note.trim(),
+          categoryRate: currentWorker.hourlyRate || 25,
+        }),
+      })
+      
+      if (res.ok) {
+        setMinutes('')
+        setNote('')
+        // Refresh logs
+        fetchEffortLogs()
+      } else {
+        alert('Failed to log effort')
+      }
+    } catch (err) {
+      console.error('Failed to log effort:', err)
+      alert('Failed to log effort')
+    }
+  }
+  
+  const fetchEffortLogs = async () => {
+    if (!currentWorker) return
+    try {
+      const res = await fetch(`/api/effort?userId=${currentWorker.id}`)
+      const data = await res.json()
+      // Store in localStorage for offline viewing
+      localStorage.setItem('smm-logs2', JSON.stringify(data.logs || []))
+      setLogs(data.logs || [])
+    } catch (err) {
+      console.error('Failed to fetch logs:', err)
+    }
   }
 
   const addTrafficLog = () => {
@@ -254,15 +351,13 @@ const SmmHub = () => {
     const now = new Date()
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1)
 
-    const mLogs = logs.filter(l => new Date(l.date) >= startOfMonth)
+    const mLogs = logs.filter((l: any) => new Date(l.date) >= startOfMonth)
     const mTraffic = trafficLogs.filter(l => new Date(l.date) >= startOfMonth)
     const mSales = salesLogs.filter(l => new Date(l.date) >= startOfMonth)
 
-    // Worker costs
-    const workerMap = Object.fromEntries(workers.map(w => [w.id, w]))
+    // Worker costs from effort logs
     const totalSalary = mLogs.reduce((acc, log) => {
-      const w = workerMap[log.workerId]
-      const rate = w?.rates?.[log.category] || 25
+      const rate = log.categoryRate || log.user?.hourlyRate || 25
       return acc + (log.minutes / 60) * rate
     }, 0)
 
@@ -277,8 +372,7 @@ const SmmHub = () => {
 
     const smmLogs = mLogs.filter(l => ['Content Creation','Engagement/Community Mgmt','Strategy & Planning'].includes(l.category))
     const smmCost = smmLogs.reduce((acc, log) => {
-      const w = workerMap[log.workerId]
-      const rate = w?.rates?.[log.category] || 25
+      const rate = log.categoryRate || log.user?.hourlyRate || 25
       return acc + (log.minutes / 60) * rate
     }, 0)
     const costPerOrgLead = totalOrganic > 0 ? smmCost / totalOrganic : null
@@ -301,11 +395,14 @@ const SmmHub = () => {
       }
     })
 
-    // Per-worker this month
+    // Per-worker this month - from users
     const perWorker = workers.map(w => {
-      const wLogs = mLogs.filter(l => l.workerId === w.id)
+      const wLogs = mLogs.filter((l: any) => l.userId === w.id || l.user?.id === w.id)
       const mins = wLogs.reduce((a, l) => a + l.minutes, 0)
-      const cost = wLogs.reduce((acc, log) => acc + (log.minutes / 60) * (w.rates[log.category] || 25), 0)
+      const cost = wLogs.reduce((acc, log) => {
+        const rate = log.categoryRate || w.hourlyRate || 25
+        return acc + (log.minutes / 60) * rate
+      }, 0)
       return { ...w, monthMins: mins, monthCost: cost }
     })
 
@@ -371,20 +468,55 @@ const SmmHub = () => {
       <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700;900&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet"/>
       <div style={{ background: '#1e293b', borderRadius: 20, padding: 40, width: 380, border: '1px solid #334155' }}>
         <Users size={32} color="#10b981" style={{marginBottom: 16}}/>
-        <h2 style={{ color: 'white', fontWeight: 900, fontSize: 22, margin: '0 0 6px' }}>Select Account</h2>
-        <p style={{ color: '#64748b', fontSize: 13, margin: '0 0 24px' }}>Who's logging in?</p>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-          {workers.filter(w => w.active).map(w => (
-            <button key={w.id} onClick={() => handleWorkerSelect(w)} style={{ background: '#0f172a', border: '1px solid #334155', borderRadius: 12, padding: '14px 18px', color: 'white', fontWeight: 600, fontSize: 15, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 12, textAlign: 'left', transition: 'border-color 0.2s' }}>
-              <div style={{ width: 36, height: 36, borderRadius: '50%', background: 'linear-gradient(135deg,#10b981,#3b82f6)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 900, fontSize: 16 }}>
-                {w.name[0]}
+        <h2 style={{ color: 'white', fontWeight: 900, fontSize: 22, margin: '0 0 6px' }}>Worker Login</h2>
+        <p style={{ color: '#64748b', fontSize: 13, margin: '0 0 24px' }}>
+          {workerLoginMode === 'select' ? 'Select your account' : 'Enter your password'}
+        </p>
+        
+        {workerLoginMode === 'select' ? (
+          <>
+            {workersLoading ? (
+              <div style={{ textAlign: 'center', padding: 20, color: '#94a3b8' }}>Loading workers...</div>
+            ) : workersList.length > 0 ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                {workersList.map(w => (
+                  <button key={w.id} onClick={() => handleWorkerSelect(w)} style={{ background: '#0f172a', border: '1px solid #334155', borderRadius: 12, padding: '14px 18px', color: 'white', fontWeight: 600, fontSize: 15, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 12, textAlign: 'left', transition: 'border-color 0.2s' }}>
+                    <div style={{ width: 36, height: 36, borderRadius: '50%', background: w.avatarUrl ? 'none' : 'linear-gradient(135deg,#10b981,#3b82f6)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 900, fontSize: 16, overflow: 'hidden' }}>
+                      {w.avatarUrl ? <img src={w.avatarUrl} alt={w.name} style={{width:'100%',height:'100%',objectFit:'cover'}}/> : w.name[0]}
+                    </div>
+                    {w.name}
+                  </button>
+                ))}
               </div>
-              {w.name}
-            </button>
-          ))}
-          {workers.filter(w => w.active).length === 0 && <p style={{color:'#64748b',fontSize:13}}>No active workers. Ask your admin to add you.</p>}
-        </div>
-        <button onClick={() => setAuthState('select')} style={{ marginTop: 20, width: '100%', background: 'transparent', border: '1px solid #334155', borderRadius: 10, padding: '11px', color: '#94a3b8', fontWeight: 600, cursor: 'pointer', fontSize: 13 }}>← Back</button>
+            ) : (
+              <div style={{ textAlign: 'center', padding: 20, color: '#94a3b8' }}>
+                <p>No workers found.</p>
+                <p style={{fontSize:12,marginTop:8}}>Ask your admin to create a worker account.</p>
+              </div>
+            )}
+            <button onClick={() => setAuthState('select')} style={{ marginTop: 20, width: '100%', background: 'transparent', border: '1px solid #334155', borderRadius: 10, padding: '11px', color: '#94a3b8', fontWeight: 600, cursor: 'pointer', fontSize: 13 }}>← Back</button>
+          </>
+        ) : (
+          <>
+            <div style={{ background: '#0f172a', borderRadius: 10, padding: '14px 16px', border: '1px solid #334155', marginBottom: 16 }}>
+              <p style={{ fontSize: 12, color: '#94a3b8', margin: '0 0 4px' }}>Logging in as</p>
+              <p style={{ fontSize: 16, fontWeight: 700, color: 'white', margin: 0 }}>{workersList.find(w => w.username === loginUsername)?.name || loginUsername}</p>
+            </div>
+            <input 
+              type="password" 
+              value={loginPassword} 
+              onChange={e => { setLoginPassword(e.target.value); setLoginError('') }}
+              onKeyDown={e => e.key === 'Enter' && handleWorkerPasswordLogin()}
+              placeholder="Enter your password"
+              style={{ width: '100%', background: '#0f172a', border: '1px solid #334155', borderRadius: 10, padding: '14px 16px', color: 'white', fontSize: 16, outline: 'none', boxSizing: 'border-box', marginBottom: 8 }}
+            />
+            {loginError && <p style={{ color: '#ef4444', fontSize: 12, marginBottom: 16 }}>{loginError}</p>}
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button onClick={() => { setWorkerLoginMode('select'); setLoginUsername(''); setLoginPassword('') }} style={{ flex: 1, background: 'transparent', border: '1px solid #334155', borderRadius: 10, padding: '12px', color: '#94a3b8', fontWeight: 600, cursor: 'pointer', fontSize: 14 }}>Back</button>
+              <button onClick={handleWorkerPasswordLogin} style={{ flex: 2, background: 'linear-gradient(135deg,#10b981,#3b82f6)', border: 'none', borderRadius: 10, padding: '12px', color: 'white', fontWeight: 700, cursor: 'pointer', fontSize: 14 }}>Login</button>
+            </div>
+          </>
+        )}
       </div>
     </div>
   )
@@ -606,15 +738,19 @@ const SmmHub = () => {
                     {['Date','Category','Duration','Note',''].map(h => <th key={h} style={{ padding: '10px 18px', textAlign: 'left', fontSize: 11, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase' }}>{h}</th>)}
                   </tr></thead>
                   <tbody>
-                    {logs.filter(l => l.workerId === currentWorker?.id).slice(0, 20).map(l => (
-                      <tr key={l.id} style={{ borderTop: '1px solid #f1f5f9' }}>
-                        <td style={{ padding: '13px 18px', fontSize: 13 }}>{l.date}</td>
-                        <td style={{ padding: '13px 18px', fontSize: 13, fontWeight: 600 }}>{l.category}</td>
-                        <td style={{ padding: '13px 18px', fontSize: 13 }}>{l.minutes}m</td>
-                        <td style={{ padding: '13px 18px', fontSize: 12, color: '#94a3b8' }}>{l.note || '—'}</td>
-                        <td style={{ padding: '13px 18px' }}><button onClick={() => setLogs(p => p.filter(x => x.id !== l.id))} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#cbd5e1' }}><Trash2 size={13}/></button></td>
-                      </tr>
-                    ))}
+                    {logs.length === 0 ? (
+                      <tr><td colSpan={5} style={{padding:'40px 20px',textAlign:'center',color:'#94a3b8'}}>No logs yet. Start by logging your effort.</td></tr>
+                    ) : (
+                      logs.slice(0, 20).map((l: any) => (
+                        <tr key={l.id} style={{ borderTop: '1px solid #f1f5f9' }}>
+                          <td style={{ padding: '13px 18px', fontSize: 13 }}>{new Date(l.date).toLocaleDateString()}</td>
+                          <td style={{ padding: '13px 18px', fontSize: 13, fontWeight: 600 }}>{l.category}</td>
+                          <td style={{ padding: '13px 18px', fontSize: 13 }}>{l.minutes}m</td>
+                          <td style={{ padding: '13px 18px', fontSize: 12, color: '#94a3b8' }}>{l.note || '—'}</td>
+                          <td style={{ padding: '13px 18px' }}></td>
+                        </tr>
+                      ))
+                    )}
                   </tbody>
                 </table>
               </div>
@@ -698,52 +834,18 @@ const SmmHub = () => {
 
         {/* ── WORKERS (admin only) ── */}
         {activeTab === 'workers' && isAdmin && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-            {/* Add worker */}
-            <div style={{ background: 'white', borderRadius: 16, padding: '24px', border: '1px solid #e2e8f0', maxWidth: 500 }}>
-              <h2 style={{ fontWeight: 900, fontSize: 16, margin: '0 0 18px', display: 'flex', alignItems: 'center', gap: 8 }}><Plus size={18} color="#6366f1"/> Add Worker</h2>
-              <div style={{ display: 'flex', gap: 10 }}>
-                <input type="text" placeholder="Full name" value={newWorker.name} onChange={e => setNewWorker({...newWorker, name: e.target.value})} style={{ flex: 2, padding: '10px 12px', border: '1px solid #e2e8f0', borderRadius: 10, fontSize: 14 }}/>
-                <div style={{ position: 'relative', flex: 1 }}>
-                  <span style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: '#94a3b8', fontSize: 13 }}>$</span>
-                  <input type="number" placeholder="25" value={newWorker.rate} onChange={e => setNewWorker({...newWorker, rate: e.target.value})} style={{ width: '100%', padding: '10px 10px 10px 22px', border: '1px solid #e2e8f0', borderRadius: 10, fontSize: 14, boxSizing: 'border-box' }}/>
-                </div>
-                <button onClick={addWorker} style={{ background: '#6366f1', border: 'none', borderRadius: 10, padding: '10px 20px', color: 'white', fontWeight: 700, cursor: 'pointer', fontSize: 14 }}>Add</button>
-              </div>
-              <p style={{ fontSize: 11, color: '#cbd5e1', marginTop: 8 }}>Default hourly rate applies to all categories; customize below after adding.</p>
-            </div>
-
-            {/* Worker list */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-              {workers.map(w => (
-                <div key={w.id} style={{ background: 'white', borderRadius: 16, border: '1px solid #e2e8f0', overflow: 'hidden' }}>
-                  <div style={{ padding: '18px 24px', borderBottom: '1px solid #f1f5f9', display: 'flex', alignItems: 'center', gap: 14 }}>
-                    <div style={{ width: 40, height: 40, borderRadius: '50%', background: 'linear-gradient(135deg,#6366f1,#3b82f6)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontWeight: 900, fontSize: 18 }}>{w.name[0]}</div>
-                    <div style={{ flex: 1 }}>
-                      <p style={{ fontWeight: 800, fontSize: 15, margin: 0 }}>{w.name}</p>
-                      <p style={{ fontSize: 12, color: '#94a3b8', margin: '2px 0 0' }}>Worker · ID: {w.id}</p>
-                    </div>
-                    <div style={{ display: 'flex', gap: 8 }}>
-                      <button onClick={() => toggleWorkerStatus(w.id)} style={{ background: w.active ? '#f0fdf4' : '#fef2f2', color: w.active ? '#10b981' : '#ef4444', border: 'none', borderRadius: 8, padding: '7px 14px', fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>
-                        {w.active ? 'Active' : 'Inactive'}
-                      </button>
-                      <button onClick={() => removeWorker(w.id)} style={{ background: '#fef2f2', color: '#ef4444', border: 'none', borderRadius: 8, padding: '7px 12px', cursor: 'pointer' }}><Trash2 size={14}/></button>
-                    </div>
-                  </div>
-                  <div style={{ padding: '16px 24px', display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 10 }}>
-                    {TASK_CATEGORIES.map(cat => (
-                      <div key={cat}>
-                        <label style={{ fontSize: 10, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', display: 'block', marginBottom: 3 }}>{cat}</label>
-                        <div style={{ position: 'relative' }}>
-                          <span style={{ position: 'absolute', left: 9, top: '50%', transform: 'translateY(-50%)', color: '#94a3b8', fontSize: 12 }}>$</span>
-                          <input type="number" value={w.rates[cat]} onChange={e => updateWorkerRate(w.id, cat, e.target.value)} style={{ width: '100%', padding: '7px 8px 7px 20px', border: '1px solid #e2e8f0', borderRadius: 8, fontSize: 13, boxSizing: 'border-box' }}/>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              ))}
-            </div>
+          <div style={{ textAlign: 'center', padding: '60px 20px' }}>
+            <Users size={48} color="#94a3b8" style={{marginBottom: 16}}/>
+            <h2 style={{ fontWeight: 900, fontSize: 20, margin: '0 0 8px' }}>Worker Management Moved</h2>
+            <p style={{ color: '#64748b', fontSize: 14, margin: '0 0 24px' }}>
+              Workers are now managed as Users with the "user" role.
+            </p>
+            <button
+              onClick={() => { setActiveTab('settings'); setSettingsSubTab('users') }}
+              style={{ background: 'linear-gradient(135deg,#3b82f6,#6366f1)', border: 'none', borderRadius: 10, padding: '12px 24px', color: 'white', fontWeight: 700, cursor: 'pointer', fontSize: 14 }}
+            >
+              Go to User Management →
+            </button>
           </div>
         )}
 
@@ -974,6 +1076,7 @@ const UserManagement = () => {
     email: '',
     password: '',
     role: 'user',
+    hourlyRate: '25',
   })
   const [avatarPreview, setAvatarPreview] = useState<string | null>(null)
   const [avatarFile, setAvatarFile] = useState<File | null>(null)
@@ -1093,7 +1196,7 @@ const UserManagement = () => {
       }
 
       setSuccess(editingUser ? 'User updated successfully' : 'User created successfully')
-      setFormData({ name: '', username: '', email: '', password: '', role: 'user' })
+      setFormData({ name: '', username: '', email: '', password: '', role: 'user', hourlyRate: '25' })
       setAvatarPreview(null)
       setAvatarFile(null)
       setShowForm(false)
@@ -1113,6 +1216,7 @@ const UserManagement = () => {
       email: user.email,
       password: '',
       role: user.role,
+      hourlyRate: user.hourlyRate?.toString() || '25',
     })
     setAvatarPreview(user.avatarUrl || null)
     setShowForm(true)
@@ -1163,7 +1267,7 @@ const UserManagement = () => {
           <p style={{ color: '#64748b', fontSize: 13, margin: 0 }}>Manage user accounts, roles, and permissions</p>
         </div>
         <button
-          onClick={() => { setShowForm(true); setEditingUser(null); setFormData({ name: '', username: '', email: '', password: '', role: 'user' }); setAvatarPreview(null) }}
+          onClick={() => { setShowForm(true); setEditingUser(null); setFormData({ name: '', username: '', email: '', password: '', role: 'user', hourlyRate: '25' }); setAvatarPreview(null) }}
           style={{ background: 'linear-gradient(135deg,#3b82f6,#6366f1)', border: 'none', borderRadius: 10, padding: '12px 20px', color: 'white', fontWeight: 700, cursor: 'pointer', fontSize: 14, display: 'flex', alignItems: 'center', gap: 8 }}
         >
           <Plus size={18}/> Add User
@@ -1273,10 +1377,24 @@ const UserManagement = () => {
                   onChange={e => setFormData({ ...formData, role: e.target.value })}
                   style={{ width: '100%', padding: '10px 14px', border: '1px solid #e2e8f0', borderRadius: 8, fontSize: 14, background: 'white', boxSizing: 'border-box' }}
                 >
-                  <option value="user">User</option>
+                  <option value="user">User (Worker)</option>
                   <option value="admin">Admin</option>
                 </select>
               </div>
+
+              {/* Hourly Rate */}
+              {formData.role === 'user' && (
+                <div>
+                  <label style={{ fontSize: 12, fontWeight: 700, color: '#64748b', display: 'block', marginBottom: 6 }}>Hourly Rate ($)</label>
+                  <input
+                    type="number"
+                    value={formData.hourlyRate}
+                    onChange={e => setFormData({ ...formData, hourlyRate: e.target.value })}
+                    style={{ width: '100%', padding: '10px 14px', border: '1px solid #e2e8f0', borderRadius: 8, fontSize: 14, boxSizing: 'border-box' }}
+                    placeholder="25"
+                  />
+                </div>
+              )}
 
               {/* Actions */}
               <div style={{ display: 'flex', gap: 10, marginTop: 8 }}>
@@ -1293,7 +1411,7 @@ const UserManagement = () => {
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead>
             <tr style={{ background: '#f8fafc' }}>
-              {['User', 'Username', 'Email', 'Role', 'Status', 'Created', ''].map(h => (
+              {['User', 'Username', 'Email', 'Role', 'Rate', 'Status', 'Created', ''].map(h => (
                 <th key={h} style={{ padding: '12px 20px', textAlign: 'left', fontSize: 11, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 0.8 }}>{h}</th>
               ))}
             </tr>
@@ -1321,6 +1439,7 @@ const UserManagement = () => {
                   <td style={{ padding: '14px 20px' }}>
                     <span style={{ background: user.role === 'admin' ? '#eff6ff' : '#f1f5f9', color: user.role === 'admin' ? '#3b82f6' : '#64748b', borderRadius: 6, padding: '4px 10px', fontSize: 11, fontWeight: 700 }}>{user.role}</span>
                   </td>
+                  <td style={{ padding: '14px 20px', fontSize: 13, fontWeight: 600 }}>${user.hourlyRate || 25}/hr</td>
                   <td style={{ padding: '14px 20px' }}>
                     <button onClick={() => handleToggleActive(user)} style={{ background: user.active ? '#f0fdf4' : '#fef2f2', color: user.active ? '#10b981' : '#ef4444', border: 'none', borderRadius: 6, padding: '4px 10px', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}>
                       {user.active ? 'Active' : 'Inactive'}
