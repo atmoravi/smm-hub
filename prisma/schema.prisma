@@ -59,8 +59,8 @@ model User {
   avatarUrl String?  // Profile picture URL
   role      String   @default("user") // "admin" | "user"
   active    Boolean  @default(true)
-  hourlyRate Float   @default(25) // Default hourly rate
   currency  String   @default("EUR") // User's payment currency
+  rates     Json     @default("{\"Content Creation\":25,\"Engagement/Community Mgmt\":25,\"Strategy & Planning\":25,\"Analytics & Reporting\":25,\"Ad Management\":25,\"Client Meetings\":25,\"Admin/Misc\":25}")
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 

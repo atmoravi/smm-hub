@@ -34,7 +34,7 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json()
-    const { userId, date, minutes, category, note, categoryRate } = body
+    const { userId, date, minutes, category, note } = body
 
     // Validation
     if (!userId || !date || !minutes || !category) {
@@ -47,7 +47,7 @@ export async function POST(req: NextRequest) {
     // Verify user exists and is active
     const user = await prisma.user.findUnique({
       where: { id: userId },
-      select: { id: true, active: true, hourlyRate: true },
+      select: { id: true, active: true, rates: true },
     })
 
     if (!user) {
@@ -58,6 +58,10 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'User account is inactive' }, { status: 403 })
     }
 
+    // Get rate for category or use default
+    const userRates = typeof user.rates === 'string' ? JSON.parse(user.rates) : (user.rates as Record<string, number> || {})
+    const rateForCategory = userRates[category] || 25
+
     // Create effort log
     const log = await prisma.effortLog.create({
       data: {
@@ -66,7 +70,7 @@ export async function POST(req: NextRequest) {
         minutes: parseInt(minutes),
         category,
         note: note?.trim() || null,
-        categoryRate: categoryRate || user.hourlyRate,
+        categoryRate: rateForCategory,
       },
       include: {
         user: {

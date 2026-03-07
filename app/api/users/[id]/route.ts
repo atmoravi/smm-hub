@@ -43,7 +43,7 @@ export async function PUT(req: NextRequest, { params }: RouteParams) {
   try {
     const { id } = await params
     const body = await req.json()
-    const { name, username, email, password, role, avatarUrl, active, hourlyRate, currency } = body
+    const { name, username, email, password, role, avatarUrl, active, currency, rates } = body
 
     // Check if user exists
     const existing = await prisma.user.findUnique({ where: { id } })
@@ -75,8 +75,8 @@ export async function PUT(req: NextRequest, { params }: RouteParams) {
     if (role) updateData.role = role
     if (avatarUrl !== undefined) updateData.avatarUrl = avatarUrl
     if (active !== undefined) updateData.active = active
-    if (hourlyRate !== undefined) updateData.hourlyRate = parseFloat(hourlyRate)
     if (currency !== undefined) updateData.currency = currency
+    if (rates !== undefined) updateData.rates = rates
 
     const user = await prisma.user.update({
       where: { id },
@@ -89,7 +89,6 @@ export async function PUT(req: NextRequest, { params }: RouteParams) {
         avatarUrl: true,
         role: true,
         active: true,
-        hourlyRate: true,
         currency: true,
         updatedAt: true,
       },

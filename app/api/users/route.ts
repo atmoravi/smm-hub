@@ -32,7 +32,7 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json()
-    const { name, username, email, password, role = 'user', avatarUrl, hourlyRate = 25, currency = 'EUR' } = body
+    const { name, username, email, password, role = 'user', avatarUrl, currency = 'EUR', rates } = body
 
     // Validation
     if (!name || !username || !email || !password) {
@@ -59,6 +59,18 @@ export async function POST(req: NextRequest) {
     // Hash password
     const hashedPassword = await bcrypt.hash(password, 10)
 
+    // Default rates if not provided
+    const defaultRates = {
+      "Content Creation": 25,
+      "Engagement/Community Mgmt": 25,
+      "Strategy & Planning": 25,
+      "Analytics & Reporting": 25,
+      "Ad Management": 25,
+      "Client Meetings": 25,
+      "Admin/Misc": 25,
+    }
+    const userRates = rates || defaultRates
+
     // Create user
     const user = await prisma.user.create({
       data: {
@@ -68,8 +80,8 @@ export async function POST(req: NextRequest) {
         password: hashedPassword,
         role,
         avatarUrl: avatarUrl || null,
-        hourlyRate: parseFloat(hourlyRate) || 25,
         currency: currency || 'EUR',
+        rates: userRates,
       },
       select: {
         id: true,
@@ -79,7 +91,6 @@ export async function POST(req: NextRequest) {
         avatarUrl: true,
         role: true,
         active: true,
-        hourlyRate: true,
         currency: true,
         createdAt: true,
       },

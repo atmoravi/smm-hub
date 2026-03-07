@@ -1107,10 +1107,14 @@ const UserManagement = () => {
     password: '',
     role: 'user',
   })
-  const [editUserModal, setEditUserModal] = useState<{open: boolean, user: any, hourlyRate: string, currency: string}>({
+  const [editUserModal, setEditUserModal] = useState<{open: boolean, user: any, rates: Record<string, number>}>({
     open: false,
     user: null,
-    hourlyRate: '25',
+    rates: {},
+  })
+  const [currencyModal, setCurrencyModal] = useState<{open: boolean, user: any, currency: string}>({
+    open: false,
+    user: null,
     currency: 'EUR',
   })
   const [siteSettings, setSiteSettings] = useState<{siteCurrency: string}>({siteCurrency: 'EUR'})
@@ -1249,12 +1253,19 @@ const UserManagement = () => {
     setEditUserModal({
       open: true,
       user,
-      hourlyRate: user.hourlyRate?.toString() || '25',
+      rates: typeof user.rates === 'string' ? JSON.parse(user.rates) : (user.rates || {}),
+    })
+  }
+  
+  const handleCurrencyEdit = (user: any) => {
+    setCurrencyModal({
+      open: true,
+      user,
       currency: user.currency || 'EUR',
     })
   }
   
-  const handleSaveUserSettings = async () => {
+  const handleSaveUserRates = async () => {
     if (!editUserModal.user) return
     setError('')
     
@@ -1262,15 +1273,12 @@ const UserManagement = () => {
       const res = await fetch(`/api/users/${editUserModal.user.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          hourlyRate: parseFloat(editUserModal.hourlyRate) || 25,
-          currency: editUserModal.currency,
-        }),
+        body: JSON.stringify({ rates: editUserModal.rates }),
       })
       
       if (res.ok) {
-        setSuccess('User settings updated')
-        setEditUserModal({ open: false, user: null, hourlyRate: '25', currency: 'EUR' })
+        setSuccess('Rates updated')
+        setEditUserModal({ open: false, user: null, rates: {} })
         fetchUsers()
         setTimeout(() => setSuccess(''), 3000)
       } else {
@@ -1278,7 +1286,32 @@ const UserManagement = () => {
         setError(data.error || 'Failed to update')
       }
     } catch (err) {
-      setError('Failed to update user settings')
+      setError('Failed to update rates')
+    }
+  }
+  
+  const handleSaveUserCurrency = async () => {
+    if (!currencyModal.user) return
+    setError('')
+    
+    try {
+      const res = await fetch(`/api/users/${currencyModal.user.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ currency: currencyModal.currency }),
+      })
+      
+      if (res.ok) {
+        setSuccess('Currency updated')
+        setCurrencyModal({ open: false, user: null, currency: 'EUR' })
+        fetchUsers()
+        setTimeout(() => setSuccess(''), 3000)
+      } else {
+        const data = await res.json()
+        setError(data.error || 'Failed to update')
+      }
+    } catch (err) {
+      setError('Failed to update currency')
     }
   }
 
@@ -1457,7 +1490,7 @@ const UserManagement = () => {
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead>
             <tr style={{ background: '#f8fafc' }}>
-              {['User', 'Username', 'Email', 'Role', 'Rate', 'Status', 'Created', ''].map(h => (
+              {['User', 'Username', 'Email', 'Role', 'Currency', 'Status', 'Created', ''].map(h => (
                 <th key={h} style={{ padding: '12px 20px', textAlign: 'left', fontSize: 11, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 0.8 }}>{h}</th>
               ))}
             </tr>
@@ -1485,7 +1518,7 @@ const UserManagement = () => {
                   <td style={{ padding: '14px 20px' }}>
                     <span style={{ background: user.role === 'admin' ? '#eff6ff' : '#f1f5f9', color: user.role === 'admin' ? '#3b82f6' : '#64748b', borderRadius: 6, padding: '4px 10px', fontSize: 11, fontWeight: 700 }}>{user.role}</span>
                   </td>
-                  <td style={{ padding: '14px 20px', fontSize: 13, fontWeight: 600 }}>${user.hourlyRate || 25}/hr</td>
+                  <td style={{ padding: '14px 20px', fontSize: 13, fontWeight: 600 }}>{user.currency || 'EUR'}</td>
                   <td style={{ padding: '14px 20px' }}>
                     <button onClick={() => handleToggleActive(user)} style={{ background: user.active ? '#f0fdf4' : '#fef2f2', color: user.active ? '#10b981' : '#ef4444', border: 'none', borderRadius: 6, padding: '4px 10px', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}>
                       {user.active ? 'Active' : 'Inactive'}
@@ -1494,8 +1527,11 @@ const UserManagement = () => {
                   <td style={{ padding: '14px 20px', fontSize: 12, color: '#94a3b8' }}>{new Date(user.createdAt).toLocaleDateString()}</td>
                   <td style={{ padding: '14px 20px' }}>
                     <div style={{ display: 'flex', gap: 6 }}>
-                      <button onClick={() => handleEdit(user)} style={{ background: '#eff6ff', border: 'none', borderRadius: 6, padding: '6px 10px', cursor: 'pointer', color: '#3b82f6' }} title="Edit">
-                        <Settings size={14}/>
+                      <button onClick={() => handleCurrencyEdit(user)} style={{ background: '#f0fdf4', border: 'none', borderRadius: 6, padding: '6px 10px', cursor: 'pointer', color: '#10b981' }} title="Currency">
+                        <Globe size={14}/>
+                      </button>
+                      <button onClick={() => handleEdit(user)} style={{ background: '#eff6ff', border: 'none', borderRadius: 6, padding: '6px 10px', cursor: 'pointer', color: '#3b82f6' }} title="Set Rates">
+                        <DollarSign size={14}/>
                       </button>
                       <button onClick={() => handleDelete(user.id, user.name)} style={{ background: '#fef2f2', border: 'none', borderRadius: 6, padding: '6px 10px', cursor: 'pointer', color: '#ef4444' }} title="Delete">
                         <Trash2 size={14}/>
@@ -1509,42 +1545,65 @@ const UserManagement = () => {
         </table>
       </div>
 
-      {/* Edit User Settings Modal (Hourly Rate & Currency) */}
+      {/* Edit User Rates Modal */}
       {editUserModal.open && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
+          <div style={{ background: 'white', borderRadius: 16, padding: 32, width: '100%', maxWidth: 560, maxHeight: '90vh', overflowY: 'auto' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
+              <div>
+                <h3 style={{ fontWeight: 900, fontSize: 18, margin: '0 0 4px' }}>Hourly Rates by Category</h3>
+                <p style={{ fontSize: 13, color: '#64748b', margin: 0 }}>{editUserModal.user?.name}</p>
+              </div>
+              <button onClick={() => setEditUserModal({ open: false, user: null, rates: {} })} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8', padding: 4 }}>
+                <Trash2 size={20}/>
+              </button>
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 20 }}>
+              {['Content Creation', 'Engagement/Community Mgmt', 'Strategy & Planning', 'Analytics & Reporting', 'Ad Management', 'Client Meetings', 'Admin/Misc'].map(cat => (
+                <div key={cat}>
+                  <label style={{ fontSize: 11, fontWeight: 700, color: '#64748b', display: 'block', marginBottom: 4 }}>{cat}</label>
+                  <div style={{ position: 'relative' }}>
+                    <span style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: '#94a3b8', fontSize: 13 }}>$</span>
+                    <input
+                      type="number"
+                      value={editUserModal.rates[cat] || 25}
+                      onChange={e => setEditUserModal({ ...editUserModal, rates: { ...editUserModal.rates, [cat]: parseFloat(e.target.value) || 0 } })}
+                      style={{ width: '100%', padding: '8px 10px 8px 22px', border: '1px solid #e2e8f0', borderRadius: 6, fontSize: 13, boxSizing: 'border-box' }}
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button type="button" onClick={() => setEditUserModal({ open: false, user: null, rates: {} })} style={{ flex: 1, background: '#f1f5f9', border: 'none', borderRadius: 8, padding: '12px', color: '#64748b', fontWeight: 600, cursor: 'pointer', fontSize: 14 }}>Cancel</button>
+              <button type="button" onClick={handleSaveUserRates} style={{ flex: 2, background: 'linear-gradient(135deg,#3b82f6,#6366f1)', border: 'none', borderRadius: 8, padding: '12px', color: 'white', fontWeight: 700, cursor: 'pointer', fontSize: 14 }}>Save Rates</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit User Currency Modal */}
+      {currencyModal.open && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
           <div style={{ background: 'white', borderRadius: 16, padding: 32, width: '100%', maxWidth: 420 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
               <div>
-                <h3 style={{ fontWeight: 900, fontSize: 18, margin: '0 0 4px' }}>Payment Settings</h3>
-                <p style={{ fontSize: 13, color: '#64748b', margin: 0 }}>{editUserModal.user?.name}</p>
+                <h3 style={{ fontWeight: 900, fontSize: 18, margin: '0 0 4px' }}>Payment Currency</h3>
+                <p style={{ fontSize: 13, color: '#64748b', margin: 0 }}>{currencyModal.user?.name}</p>
               </div>
-              <button onClick={() => setEditUserModal({ open: false, user: null, hourlyRate: '25', currency: 'EUR' })} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8', padding: 4 }}>
+              <button onClick={() => setCurrencyModal({ open: false, user: null, currency: 'EUR' })} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8', padding: 4 }}>
                 <Trash2 size={20}/>
               </button>
             </div>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-              {/* Hourly Rate */}
               <div>
-                <label style={{ fontSize: 12, fontWeight: 700, color: '#64748b', display: 'block', marginBottom: 6 }}>Hourly Rate</label>
-                <div style={{ position: 'relative' }}>
-                  <span style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: '#94a3b8', fontSize: 14 }}>$</span>
-                  <input
-                    type="number"
-                    value={editUserModal.hourlyRate}
-                    onChange={e => setEditUserModal({ ...editUserModal, hourlyRate: e.target.value })}
-                    style={{ width: '100%', padding: '10px 14px 10px 28px', border: '1px solid #e2e8f0', borderRadius: 8, fontSize: 14, boxSizing: 'border-box' }}
-                    placeholder="25"
-                  />
-                </div>
-              </div>
-
-              {/* Currency */}
-              <div>
-                <label style={{ fontSize: 12, fontWeight: 700, color: '#64748b', display: 'block', marginBottom: 6 }}>Payment Currency</label>
+                <label style={{ fontSize: 12, fontWeight: 700, color: '#64748b', display: 'block', marginBottom: 6 }}>Currency</label>
                 <select
-                  value={editUserModal.currency}
-                  onChange={e => setEditUserModal({ ...editUserModal, currency: e.target.value })}
+                  value={currencyModal.currency}
+                  onChange={e => setCurrencyModal({ ...currencyModal, currency: e.target.value })}
                   style={{ width: '100%', padding: '10px 14px', border: '1px solid #e2e8f0', borderRadius: 8, fontSize: 14, background: 'white', boxSizing: 'border-box' }}
                 >
                   <option value="EUR">EUR - Euro</option>
@@ -1557,10 +1616,9 @@ const UserManagement = () => {
                 <p style={{ fontSize: 11, color: '#94a3b8', marginTop: 6 }}>Currency this user gets paid in</p>
               </div>
 
-              {/* Actions */}
-              <div style={{ display: 'flex', gap: 10, marginTop: 8 }}>
-                <button type="button" onClick={() => setEditUserModal({ open: false, user: null, hourlyRate: '25', currency: 'EUR' })} style={{ flex: 1, background: '#f1f5f9', border: 'none', borderRadius: 8, padding: '12px', color: '#64748b', fontWeight: 600, cursor: 'pointer', fontSize: 14 }}>Cancel</button>
-                <button type="button" onClick={handleSaveUserSettings} style={{ flex: 2, background: 'linear-gradient(135deg,#3b82f6,#6366f1)', border: 'none', borderRadius: 8, padding: '12px', color: 'white', fontWeight: 700, cursor: 'pointer', fontSize: 14 }}>Save Settings</button>
+              <div style={{ display: 'flex', gap: 10 }}>
+                <button type="button" onClick={() => setCurrencyModal({ open: false, user: null, currency: 'EUR' })} style={{ flex: 1, background: '#f1f5f9', border: 'none', borderRadius: 8, padding: '12px', color: '#64748b', fontWeight: 600, cursor: 'pointer', fontSize: 14 }}>Cancel</button>
+                <button type="button" onClick={handleSaveUserCurrency} style={{ flex: 2, background: 'linear-gradient(135deg,#3b82f6,#6366f1)', border: 'none', borderRadius: 8, padding: '12px', color: 'white', fontWeight: 700, cursor: 'pointer', fontSize: 14 }}>Save Currency</button>
               </div>
             </div>
           </div>
