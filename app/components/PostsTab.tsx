@@ -170,6 +170,7 @@ const PostModal: React.FC<{ post: Post; onSave: (post: Post) => void; onDelete: 
   const [form, setForm] = useState({ ...post })
   const [tagInput, setTagInput] = useState('')
   const [activeSection, setActiveSection] = useState('details')
+  const [workNote, setWorkNote] = useState('')
 
   const set = (k: keyof Post, v: any) => setForm(f => ({ ...f, [k]: v }))
   const addTag = () => {
@@ -179,6 +180,17 @@ const PostModal: React.FC<{ post: Post; onSave: (post: Post) => void; onDelete: 
   }
   const removeTag = (t: string) => set('tags', form.tags.filter(x => x !== t))
   const canEditResults = isAdmin || form.status === 'Published' || form.status === 'Results In'
+  const canEditWork = isAdmin || form.status !== 'Results In'
+
+  const addWorkTime = (minutes: number) => {
+    if (minutes > 0) {
+      set('minutesSpent', (form.minutesSpent || 0) + minutes)
+      if (workNote.trim()) {
+        set('notes', form.notes ? `${form.notes}\n\n[${new Date().toLocaleDateString()}] ${workNote.trim()}` : `[${new Date().toLocaleDateString()}] ${workNote.trim()}`)
+        setWorkNote('')
+      }
+    }
+  }
 
   return (
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.5)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }} onClick={onClose}>
@@ -195,8 +207,8 @@ const PostModal: React.FC<{ post: Post; onSave: (post: Post) => void; onDelete: 
             </div>
           </div>
           <div style={{ display: 'flex', gap: 4 }}>
-            {['details', 'results'].map(s => (
-              <button key={s} onClick={() => setActiveSection(s)} style={{ padding: '7px 16px', borderRadius: 8, border: 'none', background: activeSection === s ? '#0f172a' : 'transparent', color: activeSection === s ? 'white' : '#64748b', fontWeight: 700, fontSize: 13, cursor: 'pointer', textTransform: 'capitalize' }}>{s === 'results' ? 'Results' : 'Details'}</button>
+            {['details', 'worktime', 'results'].map(s => (
+              <button key={s} onClick={() => setActiveSection(s)} style={{ padding: '7px 16px', borderRadius: 8, border: 'none', background: activeSection === s ? '#0f172a' : 'transparent', color: activeSection === s ? 'white' : '#64748b', fontWeight: 700, fontSize: 13, cursor: 'pointer', textTransform: 'capitalize' }}>{s === 'worktime' ? '⏱ Work' : s === 'results' ? '📊 Results' : '📋 Details'}</button>
             ))}
           </div>
         </div>
@@ -247,10 +259,6 @@ const PostModal: React.FC<{ post: Post; onSave: (post: Post) => void; onDelete: 
                 <textarea value={form.caption} onChange={e => set('caption', e.target.value)} placeholder="Write your post copy here..." style={{ ...inputStyle, height: 90, resize: 'none' }}/>
               </div>
               <div>
-                <label style={labelStyle}>Time Spent (minutes)</label>
-                <input type="number" value={form.minutesSpent || ''} onChange={e => set('minutesSpent', parseInt(e.target.value) || 0)} placeholder="e.g. 90" style={inputStyle}/>
-              </div>
-              <div>
                 <label style={labelStyle}>Tags</label>
                 <div style={{ display: 'flex', gap: 8 }}>
                   <input value={tagInput} onChange={e => setTagInput(e.target.value)} onKeyDown={e => e.key === 'Enter' && addTag()} placeholder="Add tag..." style={{ ...inputStyle, flex: 1, marginBottom: 0 }}/>
@@ -268,18 +276,90 @@ const PostModal: React.FC<{ post: Post; onSave: (post: Post) => void; onDelete: 
                 )}
               </div>
               <div>
-                <label style={labelStyle}>Notes</label>
-                <textarea value={form.notes} onChange={e => set('notes', e.target.value)} placeholder="Internal notes, learnings..." style={{ ...inputStyle, height: 60, resize: 'none' }}/>
+                <label style={labelStyle}>Planning Notes</label>
+                <textarea value={form.notes} onChange={e => set('notes', e.target.value)} placeholder="Initial ideas, references, inspiration..." style={{ ...inputStyle, height: 60, resize: 'none' }}/>
               </div>
+            </div>
+          )}
+          {activeSection === 'worktime' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+              {/* Time summary */}
+              <div style={{ background: 'linear-gradient(135deg,#0f172a,#1e293b)', borderRadius: 14, padding: '18px', color: 'white', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div>
+                  <p style={{ fontSize: 11, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', margin: '0 0 4px' }}>Total Time Tracked</p>
+                  <p style={{ fontSize: 28, fontWeight: 900, margin: 0 }}>{Math.floor(form.minutesSpent / 60)}h {(form.minutesSpent || 0) % 60}m</p>
+                </div>
+                <div style={{ textAlign: 'right' }}>
+                  <p style={{ fontSize: 11, color: '#94a3b8', margin: '0 0 4px' }}>At $25/hr</p>
+                  <p style={{ fontSize: 20, fontWeight: 900, color: '#10b981', margin: 0 }}>${((form.minutesSpent || 0) / 60 * 25).toFixed(2)}</p>
+                </div>
+              </div>
+
+              {/* Quick add time buttons */}
+              <div>
+                <label style={labelStyle}>Quick Add Time</label>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8 }}>
+                  {[15, 30, 45, 60].map(m => (
+                    <button key={m} onClick={() => addWorkTime(m)} style={{ background: '#f1f5f9', border: '1px solid #e2e8f0', borderRadius: 8, padding: '10px', color: '#475569', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>+{m}m</button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Custom time entry */}
+              <div>
+                <label style={labelStyle}>Custom Time Entry</label>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <input type="number" id="customMinutes" placeholder="Minutes" style={{ ...inputStyle, flex: 1 }}/>
+                  <button onClick={() => { const el = document.getElementById('customMinutes') as HTMLInputElement; addWorkTime(parseInt(el.value) || 0); el.value = ''; }} style={{ background: '#0f172a', border: 'none', borderRadius: 10, padding: '0 18px', color: 'white', cursor: 'pointer', fontWeight: 700, fontSize: 13 }}>Add</button>
+                </div>
+              </div>
+
+              {/* Work notes */}
+              <div>
+                <label style={labelStyle}>Work Log Note (optional)</label>
+                <textarea value={workNote} onChange={e => setWorkNote(e.target.value)} placeholder="What did you work on? Design, copy, revisions..." style={{ ...inputStyle, height: 70, resize: 'none' }}/>
+                <p style={{ fontSize: 11, color: '#94a3b8', marginTop: 6 }}>This note will be timestamped and added to the notes section when you add time.</p>
+              </div>
+
+              {/* Status quick update */}
+              <div style={{ background: '#f8fafc', borderRadius: 12, padding: '14px 16px' }}>
+                <label style={labelStyle}>Update Status</label>
+                <select value={form.status} onChange={e => set('status', e.target.value)} style={{ ...inputStyle, background: 'white' }} disabled={!canEditWork}>
+                  {STATUSES.map(s => <option key={s}>{s}</option>)}
+                </select>
+                <p style={{ fontSize: 11, color: '#94a3b8', marginTop: 6 }}>Move from Draft → Scheduled → Published as you progress.</p>
+              </div>
+
+              {/* Time history hint */}
+              {form.notes && (
+                <div style={{ background: '#f1f5f9', borderRadius: 10, padding: '12px 14px', fontSize: 12, color: '#64748b' }}>
+                  <p style={{ fontWeight: 700, margin: '0 0 6px' }}>📝 Work Notes History:</p>
+                  <div style={{ maxHeight: 120, overflowY: 'auto', lineHeight: 1.6 }}>
+                    {form.notes.split('\n\n').map((note, i) => (
+                      <p key={i} style={{ margin: '0 0 8px', paddingBottom: 8, borderBottom: i < form.notes.split('\n\n').length - 1 ? '1px solid #e2e8f0' : 'none' }}>{note}</p>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           )}
           {activeSection === 'results' && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
               {(form.status === 'Draft' || form.status === 'Scheduled') && (
                 <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 12, padding: '14px 16px', fontSize: 13, color: '#92400e' }}>
-                  Results can be filled in once the post is <strong>Published</strong> or <strong>Results In</strong>. Update the status in Details first.
+                  Results can be filled in once the post is <strong>Published</strong> or <strong>Results In</strong>. Update the status in Work first.
                 </div>
               )}
+
+              {/* Time investment summary */}
+              <div style={{ background: '#f8fafc', borderRadius: 12, padding: '14px 16px', border: '1px solid #e2e8f0' }}>
+                <p style={{ fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', margin: '0 0 8px' }}>Production Investment</p>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ fontSize: 13, color: '#94a3b8' }}>Time tracked: <strong style={{ color: '#0f172a' }}>{Math.floor(form.minutesSpent / 60)}h {(form.minutesSpent || 0) % 60}m</strong></span>
+                  <span style={{ fontSize: 13, color: '#94a3b8' }}>Cost: <strong style={{ color: '#10b981' }}>${((form.minutesSpent || 0) / 60 * 25).toFixed(2)}</strong></span>
+                </div>
+              </div>
+
               <div>
                 <label style={labelStyle}>Published Date</label>
                 <input type="date" value={form.publishedDate} onChange={e => set('publishedDate', e.target.value)} style={inputStyle} disabled={!canEditResults}/>
@@ -298,8 +378,8 @@ const PostModal: React.FC<{ post: Post; onSave: (post: Post) => void; onDelete: 
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10 }}>
                   {[
                     { label: 'CVR', value: form.impressions > 0 && form.organicLeads > 0 ? ((form.organicLeads / form.impressions) * 100).toFixed(2) + '%' : '-', color: '#6366f1' },
-                    { label: 'Cost per Lead', value: form.organicLeads > 0 && form.minutesSpent > 0 ? '$' + ((form.minutesSpent / 60) * 25 / form.organicLeads).toFixed(2) : '-', color: '#f59e0b' },
-                    { label: 'Impr. per Hour', value: form.impressions > 0 && form.minutesSpent > 0 ? Math.round(form.impressions / (form.minutesSpent / 60)).toLocaleString() : '-', color: '#3b82f6' },
+                    { label: 'Cost/Lead', value: form.organicLeads > 0 && form.minutesSpent > 0 ? '$' + ((form.minutesSpent / 60) * 25 / form.organicLeads).toFixed(2) : '-', color: '#f59e0b' },
+                    { label: 'Impr/Hr', value: form.impressions > 0 && form.minutesSpent > 0 ? Math.round(form.impressions / (form.minutesSpent / 60)).toLocaleString() : '-', color: '#3b82f6' },
                   ].map(m => (
                     <div key={m.label} style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: 10, padding: '12px', textAlign: 'center' }}>
                       <p style={{ fontSize: 18, fontWeight: 900, color: m.color, margin: '0 0 4px' }}>{m.value}</p>
@@ -308,9 +388,19 @@ const PostModal: React.FC<{ post: Post; onSave: (post: Post) => void; onDelete: 
                   ))}
                 </div>
               )}
+              {form.organicLeads > 0 && form.minutesSpent > 0 && (
+                <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 12, padding: '14px 16px' }}>
+                  <p style={{ fontSize: 11, fontWeight: 700, color: '#3b82f6', textTransform: 'uppercase', margin: '0 0 6px' }}>ROI Summary</p>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span style={{ fontSize: 13, color: '#64748b' }}>Leads per hour: <strong style={{ color: '#0f172a' }}>{(form.organicLeads / (form.minutesSpent / 60)).toFixed(1)}</strong></span>
+                    <span style={{ fontSize: 13, color: '#64748b' }}>Revenue needed @ $50/lead: <strong style={{ color: '#10b981' }}>${(form.organicLeads * 50).toFixed(2)}</strong></span>
+                  </div>
+                </div>
+              )}
               <div>
                 <label style={labelStyle}>Post-publish notes / learnings</label>
-                <textarea value={form.notes} onChange={e => set('notes', e.target.value)} placeholder="What worked? What didn't? Key takeaways..." style={{ ...inputStyle, height: 80, resize: 'none' }} disabled={!canEditResults}/>
+                <textarea value={form.notes} onChange={e => set('notes', e.target.value)} placeholder="What worked? What didn't? Key takeaways for future posts..." style={{ ...inputStyle, height: 80, resize: 'none' }} disabled={!canEditResults}/>
+                <p style={{ fontSize: 11, color: '#94a3b8', marginTop: 6 }}>These notes will be saved separately from work logs.</p>
               </div>
             </div>
           )}
