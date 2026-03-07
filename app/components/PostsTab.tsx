@@ -420,13 +420,15 @@ const labelStyle: React.CSSProperties = { fontSize: 11, fontWeight: 700, color: 
 const inputStyle: React.CSSProperties = { width: '100%', padding: '10px 12px', border: '1px solid #e2e8f0', borderRadius: 10, fontSize: 14, background: 'white', outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit', color: '#0f172a' }
 
 interface PostsTabProps {
-  workers?: Worker[]
-  isAdmin?: boolean
-  archiveMode?: 'actual' | 'archive'
+  workers: Worker[]
+  isAdmin: boolean
+  archiveMode: 'actual' | 'archive'
 }
 
 const PostsTab: React.FC<PostsTabProps> = (props) => {
-  const { workers = [], isAdmin = false, archiveMode = 'actual' } = props
+  const workers = props.workers || []
+  const isAdmin = props.isAdmin || false
+  const archiveMode = props.archiveMode || 'actual'
   const [posts, setPosts] = useState<Post[]>(() => {
     if (typeof window === 'undefined') return SAMPLE_POSTS
     const saved = localStorage.getItem('smm-posts')
