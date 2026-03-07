@@ -581,6 +581,9 @@ const SmmHub = () => {
   // Content sub-tabs: actual vs archive
   const [contentSubTab, setContentSubTab] = useState<'actual' | 'archive'>('actual')
 
+  // Ensure workers prop is always defined for PostsTab
+  const safeWorkersList = workersList || []
+
   return (
     <div style={{ minHeight: '100vh', background: '#f8fafc', fontFamily: "'DM Sans', sans-serif", color: '#0f172a' }}>
       <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700;900&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet"/>
@@ -942,7 +945,7 @@ const SmmHub = () => {
                 </button>
               )}
             </div>
-            <PostsTab workers={workersList} isAdmin={isAdmin} archiveMode={contentSubTab} />
+            <PostsTab workers={safeWorkersList} isAdmin={isAdmin} archiveMode={contentSubTab} />
           </div>
         )}
 
