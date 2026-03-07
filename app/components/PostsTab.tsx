@@ -425,7 +425,8 @@ interface PostsTabProps {
   archiveMode?: 'actual' | 'archive'
 }
 
-const PostsTab: React.FC<PostsTabProps> = ({ workers = [], isAdmin = false, archiveMode = 'actual' }) => {
+const PostsTab: React.FC<PostsTabProps> = (props) => {
+  const { workers = [], isAdmin = false, archiveMode = 'actual' } = props
   const [posts, setPosts] = useState<Post[]>(() => {
     if (typeof window === 'undefined') return SAMPLE_POSTS
     const saved = localStorage.getItem('smm-posts')
