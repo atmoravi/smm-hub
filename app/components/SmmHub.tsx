@@ -6,8 +6,9 @@ import {
   Settings, User, Globe, Zap, Layers, History, PieChart,
   Users, Key, Eye, EyeOff, Copy, Check, Shield, LogOut,
   ArrowUpRight, ArrowDownRight, Minus, RefreshCw, ChevronDown,
-  Activity, Target, AlertCircle, Lock
+  Activity, Target, AlertCircle, Lock, FileText
 } from 'lucide-react'
+import PostsTab from './PostsTab'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 const TASK_CATEGORIES = [
@@ -106,9 +107,7 @@ const SmmHub = () => {
   const [workers, setWorkers] = useState(() => {
     if (typeof window === 'undefined') return []
     const s = localStorage.getItem('smm-workers')
-    return s ? JSON.parse(s) : [
-      { id: 'w1', name: 'Alex Rivera', role: 'worker', active: true, rates: TASK_CATEGORIES.reduce((a,c) => ({...a,[c]:25}),{}) },
-    ]
+    return s ? JSON.parse(s) : []
   })
 
   const [logs, setLogs] = useState(() => { if (typeof window === 'undefined') return []; const s = localStorage.getItem('smm-logs2'); return s ? JSON.parse(s) : [] })
@@ -168,6 +167,23 @@ const SmmHub = () => {
       fetchEffortLogs()
     }
   }, [currentWorker, authState])
+
+  // Fetch workers list when admin logs in
+  useEffect(() => {
+    if (authState === 'app' && currentRole === 'admin') {
+      setWorkersLoading(true)
+      fetch('/api/auth/workers')
+        .then(res => res.json())
+        .then(data => {
+          setWorkersList(data.workers || [])
+          setWorkersLoading(false)
+        })
+        .catch((err) => {
+          console.error('[admin-workers] Failed to load workers:', err)
+          setWorkersLoading(false)
+        })
+    }
+  }, [authState, currentRole])
 
   // ── Auth flow ────────────────────────────────────────────────────────────────
   const handleRoleSelect = (role) => {
@@ -350,9 +366,15 @@ const SmmHub = () => {
   const stats = useMemo(() => {
     const now = new Date()
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1)
+    const startOfWeek = new Date(now)
+    startOfWeek.setDate(now.getDate() - now.getDay())
+    startOfWeek.setHours(0, 0, 0, 0)
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
 
     const mLogs = logs.filter((l: any) => new Date(l.date) >= startOfMonth)
     const mTraffic = trafficLogs.filter(l => new Date(l.date) >= startOfMonth)
+    const wTraffic = trafficLogs.filter(l => new Date(l.date) >= startOfWeek)
+    const todayTraffic = trafficLogs.filter(l => new Date(l.date) >= today)
     const mSales = salesLogs.filter(l => new Date(l.date) >= startOfMonth)
 
     // Worker costs from effort logs
@@ -369,6 +391,19 @@ const SmmHub = () => {
     const totalOrganic = mTraffic.reduce((a, c) => a + c.organicLeads, 0)
     const totalPaid = mTraffic.reduce((a, c) => a + c.paidLeads, 0)
     const catchupRatio = totalPaid > 0 ? (totalOrganic / totalPaid) * 100 : 0
+
+    // LEADS monitoring: Today, This Week, This Month (Campaign), Overall
+    const todayOrganic = todayTraffic.reduce((a, c) => a + c.organicLeads, 0)
+    const todayPaid = todayTraffic.reduce((a, c) => a + c.paidLeads, 0)
+    const todayAdSpend = todayTraffic.reduce((a, c) => a + c.adSpend, 0)
+    
+    const weekOrganic = wTraffic.reduce((a, c) => a + c.organicLeads, 0)
+    const weekPaid = wTraffic.reduce((a, c) => a + c.paidLeads, 0)
+    const weekAdSpend = wTraffic.reduce((a, c) => a + c.adSpend, 0)
+    
+    const overallOrganic = trafficLogs.reduce((a, c) => a + c.organicLeads, 0)
+    const overallPaid = trafficLogs.reduce((a, c) => a + c.paidLeads, 0)
+    const overallAdSpend = trafficLogs.reduce((a, c) => a + c.adSpend, 0)
 
     const smmLogs = mLogs.filter(l => ['Content Creation','Engagement/Community Mgmt','Strategy & Planning'].includes(l.category))
     const smmCost = smmLogs.reduce((acc, log) => {
@@ -395,12 +430,13 @@ const SmmHub = () => {
       }
     })
 
-    // Per-worker this month - from users
-    const perWorker = workers.map(w => {
+    // Per-worker this month - from database users (workersList)
+    const perWorker = workersList.map(w => {
       const wLogs = mLogs.filter((l: any) => l.userId === w.id || l.user?.id === w.id)
       const mins = wLogs.reduce((a, l) => a + l.minutes, 0)
+      const hourlyRate = typeof w.rates === 'string' ? JSON.parse(w.rates) : w.rates
       const cost = wLogs.reduce((acc, log) => {
-        const rate = log.categoryRate || w.hourlyRate || 25
+        const rate = log.categoryRate || (typeof hourlyRate === 'object' ? Object.values(hourlyRate)[0] : hourlyRate) || 25
         return acc + (log.minutes / 60) * rate
       }, 0)
       return { ...w, monthMins: mins, monthCost: cost }
@@ -411,8 +447,12 @@ const SmmHub = () => {
       totalOrganic, totalPaid, catchupRatio, smmCost, costPerOrgLead,
       grossROI, netROI, trendData, perWorker,
       breakeven: totalCost,
+      // LEADS monitoring
+      todayOrganic, todayPaid, todayAdSpend,
+      weekOrganic, weekPaid, weekAdSpend,
+      overallOrganic, overallPaid, overallAdSpend,
     }
-  }, [logs, trafficLogs, salesLogs, workers])
+  }, [logs, trafficLogs, salesLogs, workersList])
 
   const formatTime = (mins) => `${Math.floor(mins/60)}h ${mins%60}m`
   const fmt = (n) => n?.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 }) ?? '—'
@@ -532,11 +572,11 @@ const SmmHub = () => {
   // ── Main App ─────────────────────────────────────────────────────────────────
   const isAdmin = currentRole === 'admin'
   const TABS = isAdmin
-    ? ['dashboard', 'traffic', 'workers', 'settings', 'history']
-    : ['effort', 'traffic', 'history']
+    ? ['dashboard', 'content', 'traffic', 'workers', 'settings', 'history']
+    : ['effort', 'content', 'traffic', 'history']
 
-  const tabLabels = { dashboard: 'Dashboard', traffic: 'Traffic', workers: 'Workers', settings: 'Settings', history: 'History', effort: 'Log Effort' }
-  const tabIcons = { dashboard: <BarChart3 size={14}/>, traffic: <Globe size={14}/>, workers: <Users size={14}/>, settings: <Settings size={14}/>, history: <History size={14}/>, effort: <Layers size={14}/> }
+  const tabLabels = { dashboard: 'Dashboard', content: 'Content', traffic: 'Traffic', workers: 'Workers', settings: 'Settings', history: 'History', effort: 'Log Effort' }
+  const tabIcons = { dashboard: <BarChart3 size={14}/>, content: <FileText size={14}/>, traffic: <Globe size={14}/>, workers: <Users size={14}/>, settings: <Settings size={14}/>, history: <History size={14}/>, effort: <Layers size={14}/> }
 
   return (
     <div style={{ minHeight: '100vh', background: '#f8fafc', fontFamily: "'DM Sans', sans-serif", color: '#0f172a' }}>
@@ -589,6 +629,111 @@ const SmmHub = () => {
                   <p style={{ fontSize: 11, color: '#cbd5e1', margin: 0 }}>{k.sub}</p>
                 </div>
               ))}
+            </div>
+
+            {/* LEADS Monitor Section */}
+            <div style={{ background: 'white', borderRadius: 16, padding: '24px', border: '1px solid #e2e8f0' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+                <div>
+                  <h3 style={{ fontWeight: 900, fontSize: 16, margin: '0 0 4px' }}>LEADS Monitor</h3>
+                  <p style={{ color: '#94a3b8', fontSize: 12, margin: 0 }}>Real-time tracking of organic and paid leads</p>
+                </div>
+                <div style={{ display: 'flex', gap: 16 }}>
+                  {[{label:'Organic', color:'#10b981'},{label:'Paid', color:'#3b82f6'},{label:'Ad Spend', color:'#f59e0b'}].map(s => (
+                    <div key={s.label} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <div style={{ width: 10, height: 10, borderRadius: '50%', background: s.color }}/>
+                      <span style={{ fontSize: 12, fontWeight: 600, color: '#64748b' }}>{s.label}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* LEADS cards grid */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16 }}>
+                {/* Today */}
+                <div style={{ background: '#f8fafc', borderRadius: 12, padding: '18px', border: '1px solid #e2e8f0' }}>
+                  <p style={{ fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', margin: '0 0 12px' }}>Today</p>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span style={{ fontSize: 12, color: '#94a3b8' }}>Organic</span>
+                      <span style={{ fontSize: 18, fontWeight: 900, color: '#10b981' }}>{fmt(stats.todayOrganic)}</span>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span style={{ fontSize: 12, color: '#94a3b8' }}>Paid</span>
+                      <span style={{ fontSize: 18, fontWeight: 900, color: '#3b82f6' }}>{fmt(stats.todayPaid)}</span>
+                    </div>
+                    <div style={{ borderTop: '1px solid #e2e8f0', marginTop: 4, paddingTop: 8 }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span style={{ fontSize: 11, color: '#94a3b8' }}>Ad Spend</span>
+                        <span style={{ fontSize: 14, fontWeight: 700, color: '#f59e0b' }}>{fmtDollar(stats.todayAdSpend)}</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* This Week */}
+                <div style={{ background: '#f8fafc', borderRadius: 12, padding: '18px', border: '1px solid #e2e8f0' }}>
+                  <p style={{ fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', margin: '0 0 12px' }}>This Week</p>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span style={{ fontSize: 12, color: '#94a3b8' }}>Organic</span>
+                      <span style={{ fontSize: 18, fontWeight: 900, color: '#10b981' }}>{fmt(stats.weekOrganic)}</span>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span style={{ fontSize: 12, color: '#94a3b8' }}>Paid</span>
+                      <span style={{ fontSize: 18, fontWeight: 900, color: '#3b82f6' }}>{fmt(stats.weekPaid)}</span>
+                    </div>
+                    <div style={{ borderTop: '1px solid #e2e8f0', marginTop: 4, paddingTop: 8 }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span style={{ fontSize: 11, color: '#94a3b8' }}>Ad Spend</span>
+                        <span style={{ fontSize: 14, fontWeight: 700, color: '#f59e0b' }}>{fmtDollar(stats.weekAdSpend)}</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* This Month (Campaign) */}
+                <div style={{ background: '#eff6ff', borderRadius: 12, padding: '18px', border: '1px solid #bfdbfe' }}>
+                  <p style={{ fontSize: 11, fontWeight: 700, color: '#3b82f6', textTransform: 'uppercase', margin: '0 0 12px' }}>This Month</p>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span style={{ fontSize: 12, color: '#64748b' }}>Organic</span>
+                      <span style={{ fontSize: 18, fontWeight: 900, color: '#10b981' }}>{fmt(stats.totalOrganic)}</span>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span style={{ fontSize: 12, color: '#64748b' }}>Paid</span>
+                      <span style={{ fontSize: 18, fontWeight: 900, color: '#3b82f6' }}>{fmt(stats.totalPaid)}</span>
+                    </div>
+                    <div style={{ borderTop: '1px solid #bfdbfe', marginTop: 4, paddingTop: 8 }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span style={{ fontSize: 11, color: '#64748b' }}>Ad Spend</span>
+                        <span style={{ fontSize: 14, fontWeight: 700, color: '#f59e0b' }}>{fmtDollar(stats.totalAdSpend)}</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Overall */}
+                <div style={{ background: '#f8fafc', borderRadius: 12, padding: '18px', border: '1px solid #e2e8f0' }}>
+                  <p style={{ fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', margin: '0 0 12px' }}>Overall</p>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span style={{ fontSize: 12, color: '#94a3b8' }}>Organic</span>
+                      <span style={{ fontSize: 18, fontWeight: 900, color: '#10b981' }}>{fmt(stats.overallOrganic)}</span>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span style={{ fontSize: 12, color: '#94a3b8' }}>Paid</span>
+                      <span style={{ fontSize: 18, fontWeight: 900, color: '#3b82f6' }}>{fmt(stats.overallPaid)}</span>
+                    </div>
+                    <div style={{ borderTop: '1px solid #e2e8f0', marginTop: 4, paddingTop: 8 }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span style={{ fontSize: 11, color: '#94a3b8' }}>Ad Spend</span>
+                        <span style={{ fontSize: 14, fontWeight: 700, color: '#f59e0b' }}>{fmtDollar(stats.overallAdSpend)}</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
             </div>
 
             {/* Organic vs Paid trend + catchup */}
@@ -685,19 +830,27 @@ const SmmHub = () => {
                   </tr>
                 </thead>
                 <tbody>
-                  {stats.perWorker.map(w => (
-                    <tr key={w.id} style={{ borderTop: '1px solid #f1f5f9' }}>
-                      <td style={{ padding: '14px 20px', display: 'flex', alignItems: 'center', gap: 10 }}>
-                        <div style={{ width: 32, height: 32, borderRadius: '50%', background: 'linear-gradient(135deg,#6366f1,#3b82f6)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontWeight: 900, fontSize: 14 }}>{w.name[0]}</div>
-                        <span style={{ fontWeight: 700 }}>{w.name}</span>
-                      </td>
-                      <td style={{ padding: '14px 20px', fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>{formatTime(w.monthMins)}</td>
-                      <td style={{ padding: '14px 20px', fontWeight: 700, color: '#3b82f6', fontVariantNumeric: 'tabular-nums' }}>{fmtDollar(w.monthCost)}</td>
-                      <td style={{ padding: '14px 20px' }}>
-                        <span style={{ background: w.active ? '#f0fdf4' : '#fef2f2', color: w.active ? '#10b981' : '#ef4444', borderRadius: 99, padding: '3px 10px', fontSize: 11, fontWeight: 700 }}>{w.active ? 'Active' : 'Inactive'}</span>
-                      </td>
+                  {stats.perWorker.length === 0 ? (
+                    <tr>
+                      <td colSpan={4} style={{ padding: '40px 20px', textAlign: 'center', color: '#94a3b8' }}>No workers found. Create user accounts in Settings → User Management.</td>
                     </tr>
-                  ))}
+                  ) : (
+                    stats.perWorker.map(w => (
+                      <tr key={w.id} style={{ borderTop: '1px solid #f1f5f9' }}>
+                        <td style={{ padding: '14px 20px', display: 'flex', alignItems: 'center', gap: 10 }}>
+                          <div style={{ width: 32, height: 32, borderRadius: '50%', background: w.avatarUrl ? 'none' : 'linear-gradient(135deg,#6366f1,#3b82f6)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontWeight: 900, fontSize: 14, overflow: 'hidden' }}>
+                            {w.avatarUrl ? <img src={w.avatarUrl} alt={w.name} style={{width:'100%',height:'100%',objectFit:'cover'}}/> : w.name[0]}
+                          </div>
+                          <span style={{ fontWeight: 700 }}>{w.name}</span>
+                        </td>
+                        <td style={{ padding: '14px 20px', fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>{formatTime(w.monthMins)}</td>
+                        <td style={{ padding: '14px 20px', fontWeight: 700, color: '#3b82f6', fontVariantNumeric: 'tabular-nums' }}>{fmtDollar(w.monthCost)}</td>
+                        <td style={{ padding: '14px 20px' }}>
+                          <span style={{ background: w.active ? '#f0fdf4' : '#fef2f2', color: w.active ? '#10b981' : '#ef4444', borderRadius: 99, padding: '3px 10px', fontSize: 11, fontWeight: 700 }}>{w.active ? 'Active' : 'Inactive'}</span>
+                        </td>
+                      </tr>
+                    ))
+                  )}
                 </tbody>
               </table>
             </div>
@@ -721,6 +874,11 @@ const SmmHub = () => {
               </div>
             </div>
           </div>
+        )}
+
+        {/* ── CONTENT (Posts Management) ── */}
+        {activeTab === 'content' && (
+          <PostsTab workers={workers} isAdmin={isAdmin} />
         )}
 
         {/* ── EFFORT LOG (worker) ── */}
