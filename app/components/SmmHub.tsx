@@ -1117,6 +1117,13 @@ const UserManagement = () => {
     user: null,
     currency: 'EUR',
   })
+  const [editUserDetailsModal, setEditUserDetailsModal] = useState<{open: boolean, user: any, name: string, email: string, avatarUrl: string}>({
+    open: false,
+    user: null,
+    name: '',
+    email: '',
+    avatarUrl: '',
+  })
   const [siteSettings, setSiteSettings] = useState<{siteCurrency: string}>({siteCurrency: 'EUR'})
   const [avatarPreview, setAvatarPreview] = useState<string | null>(null)
   const [avatarFile, setAvatarFile] = useState<File | null>(null)
@@ -1293,14 +1300,14 @@ const UserManagement = () => {
   const handleSaveUserCurrency = async () => {
     if (!currencyModal.user) return
     setError('')
-    
+
     try {
       const res = await fetch(`/api/users/${currencyModal.user.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ currency: currencyModal.currency }),
       })
-      
+
       if (res.ok) {
         setSuccess('Currency updated')
         setCurrencyModal({ open: false, user: null, currency: 'EUR' })
@@ -1312,6 +1319,46 @@ const UserManagement = () => {
       }
     } catch (err) {
       setError('Failed to update currency')
+    }
+  }
+
+  const handleEditUserDetails = (user: any) => {
+    setEditUserDetailsModal({
+      open: true,
+      user,
+      name: user.name || '',
+      email: user.email || '',
+      avatarUrl: user.avatarUrl || '',
+    })
+  }
+
+  const handleSaveUserDetails = async () => {
+    if (!editUserDetailsModal.user) return
+    setError('')
+
+    try {
+      const res = await fetch(`/api/users/${editUserDetailsModal.user.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: editUserDetailsModal.name,
+          email: editUserDetailsModal.email,
+          avatarUrl: avatarPreview || editUserDetailsModal.avatarUrl,
+        }),
+      })
+
+      if (res.ok) {
+        setSuccess('User details updated')
+        setEditUserDetailsModal({ open: false, user: null, name: '', email: '', avatarUrl: '' })
+        setAvatarPreview(null)
+        fetchUsers()
+        setTimeout(() => setSuccess(''), 3000)
+      } else {
+        const data = await res.json()
+        setError(data.error || 'Failed to update')
+      }
+    } catch (err) {
+      setError('Failed to update user details')
     }
   }
 
@@ -1527,6 +1574,9 @@ const UserManagement = () => {
                   <td style={{ padding: '14px 20px', fontSize: 12, color: '#94a3b8' }}>{new Date(user.createdAt).toLocaleDateString()}</td>
                   <td style={{ padding: '14px 20px' }}>
                     <div style={{ display: 'flex', gap: 6 }}>
+                      <button onClick={() => handleEditUserDetails(user)} style={{ background: '#faf5ff', border: 'none', borderRadius: 6, padding: '6px 10px', cursor: 'pointer', color: '#a855f7' }} title="Edit Details">
+                        <User size={14}/>
+                      </button>
                       <button onClick={() => handleCurrencyEdit(user)} style={{ background: '#f0fdf4', border: 'none', borderRadius: 6, padding: '6px 10px', cursor: 'pointer', color: '#10b981' }} title="Currency">
                         <Globe size={14}/>
                       </button>
@@ -1619,6 +1669,68 @@ const UserManagement = () => {
               <div style={{ display: 'flex', gap: 10 }}>
                 <button type="button" onClick={() => setCurrencyModal({ open: false, user: null, currency: 'EUR' })} style={{ flex: 1, background: '#f1f5f9', border: 'none', borderRadius: 8, padding: '12px', color: '#64748b', fontWeight: 600, cursor: 'pointer', fontSize: 14 }}>Cancel</button>
                 <button type="button" onClick={handleSaveUserCurrency} style={{ flex: 2, background: 'linear-gradient(135deg,#3b82f6,#6366f1)', border: 'none', borderRadius: 8, padding: '12px', color: 'white', fontWeight: 700, cursor: 'pointer', fontSize: 14 }}>Save Currency</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit User Details Modal */}
+      {editUserDetailsModal.open && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
+          <div style={{ background: 'white', borderRadius: 16, padding: 32, width: '100%', maxWidth: 480, maxHeight: '90vh', overflowY: 'auto' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
+              <h3 style={{ fontWeight: 900, fontSize: 18, margin: 0 }}>Edit User Details</h3>
+              <button onClick={() => { setEditUserDetailsModal({ open: false, user: null, name: '', email: '', avatarUrl: '' }); setAvatarPreview(null) }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8', padding: 4 }}>
+                <Trash2 size={20}/>
+              </button>
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+              {/* Profile Picture */}
+              <div>
+                <label style={{ fontSize: 12, fontWeight: 700, color: '#64748b', display: 'block', marginBottom: 8 }}>Profile Picture</label>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+                  <div style={{ width: 80, height: 80, borderRadius: '50%', background: avatarPreview || editUserDetailsModal.avatarUrl ? 'none' : '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
+                    {avatarPreview || editUserDetailsModal.avatarUrl ? (
+                      <img src={avatarPreview || editUserDetailsModal.avatarUrl} alt="Preview" style={{ width: '100%', height: '100%', objectFit: 'cover' }}/>
+                    ) : (
+                      <User size={32} color="#cbd5e1"/>
+                    )}
+                  </div>
+                  <label style={{ background: '#f1f5f9', borderRadius: 8, padding: '10px 16px', cursor: 'pointer', fontSize: 13, fontWeight: 600, color: '#475569' }}>
+                    Upload Image
+                    <input type="file" accept="image/*" onChange={handleImageChange} style={{ display: 'none' }}/>
+                  </label>
+                </div>
+              </div>
+
+              {/* Name */}
+              <div>
+                <label style={{ fontSize: 12, fontWeight: 700, color: '#64748b', display: 'block', marginBottom: 6 }}>Full Name</label>
+                <input
+                  type="text"
+                  value={editUserDetailsModal.name}
+                  onChange={e => setEditUserDetailsModal({ ...editUserDetailsModal, name: e.target.value })}
+                  style={{ width: '100%', padding: '10px 14px', border: '1px solid #e2e8f0', borderRadius: 8, fontSize: 14, boxSizing: 'border-box' }}
+                />
+              </div>
+
+              {/* Email */}
+              <div>
+                <label style={{ fontSize: 12, fontWeight: 700, color: '#64748b', display: 'block', marginBottom: 6 }}>Email</label>
+                <input
+                  type="email"
+                  value={editUserDetailsModal.email}
+                  onChange={e => setEditUserDetailsModal({ ...editUserDetailsModal, email: e.target.value })}
+                  style={{ width: '100%', padding: '10px 14px', border: '1px solid #e2e8f0', borderRadius: 8, fontSize: 14, boxSizing: 'border-box' }}
+                />
+              </div>
+
+              {/* Actions */}
+              <div style={{ display: 'flex', gap: 10, marginTop: 8 }}>
+                <button type="button" onClick={() => { setEditUserDetailsModal({ open: false, user: null, name: '', email: '', avatarUrl: '' }); setAvatarPreview(null) }} style={{ flex: 1, background: '#f1f5f9', border: 'none', borderRadius: 8, padding: '12px', color: '#64748b', fontWeight: 600, cursor: 'pointer', fontSize: 14 }}>Cancel</button>
+                <button type="button" onClick={handleSaveUserDetails} style={{ flex: 2, background: 'linear-gradient(135deg,#3b82f6,#6366f1)', border: 'none', borderRadius: 8, padding: '12px', color: 'white', fontWeight: 700, cursor: 'pointer', fontSize: 14 }}>Save Changes</button>
               </div>
             </div>
           </div>
