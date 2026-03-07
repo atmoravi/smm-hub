@@ -878,7 +878,7 @@ const SmmHub = () => {
 
         {/* ── CONTENT (Posts Management) ── */}
         {activeTab === 'content' && (
-          <PostsTab workers={workers} isAdmin={isAdmin} />
+          <PostsTab workers={workersList} isAdmin={isAdmin} />
         )}
 
         {/* ── EFFORT LOG (worker) ── */}
