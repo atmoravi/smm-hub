@@ -201,15 +201,10 @@ const SmmHub = () => {
   }
 
   const handleWorkerSelect = (worker) => {
-    if (workerLoginMode === 'select') {
-      // Show password login option
-      setWorkerLoginMode('password')
-    } else {
-      // Login with username/password
-      setLoginUsername(worker.username)
-      setCurrentWorker(worker)
-      setAuthState('worker-login')
-    }
+    // Go directly to password entry with username pre-filled
+    setLoginUsername(worker.username)
+    setCurrentWorker(worker)
+    setAuthState('worker-login')
   }
 
   const handleWorkerPasswordLogin = async () => {
@@ -468,63 +463,33 @@ const SmmHub = () => {
     </div>
   )
 
-  if (authState === 'worker-select') return (
+  if (authState === 'worker-login') return (
     <div style={{ minHeight: '100vh', background: '#0f172a', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: "'DM Sans', sans-serif" }}>
       <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700;900&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet"/>
       <div style={{ background: '#1e293b', borderRadius: 20, padding: 40, width: 380, border: '1px solid #334155' }}>
-        <Users size={32} color="#10b981" style={{marginBottom: 16}}/>
-        <h2 style={{ color: 'white', fontWeight: 900, fontSize: 22, margin: '0 0 6px' }}>Worker Login</h2>
-        <p style={{ color: '#64748b', fontSize: 13, margin: '0 0 24px' }}>
-          {workerLoginMode === 'select' ? 'Select your account' : 'Enter your password'}
-        </p>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 24 }}>
+          <div style={{ width: 48, height: 48, borderRadius: '50%', background: currentWorker?.avatarUrl ? 'none' : 'linear-gradient(135deg,#10b981,#3b82f6)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 900, fontSize: 20, color: 'white', overflow: 'hidden' }}>
+            {currentWorker?.avatarUrl ? <img src={currentWorker.avatarUrl} alt={currentWorker.name} style={{width:'100%',height:'100%',objectFit:'cover'}}/> : currentWorker?.name[0]}
+          </div>
+          <div>
+            <p style={{ fontSize: 12, color: '#94a3b8', margin: '0 0 2px' }}>Logging in as</p>
+            <p style={{ fontSize: 18, fontWeight: 700, color: 'white', margin: 0 }}>{currentWorker?.name}</p>
+          </div>
+        </div>
         
-        {workerLoginMode === 'select' ? (
-          <>
-            {workersLoading ? (
-              <div style={{ textAlign: 'center', padding: 20, color: '#94a3b8' }}>Loading workers...</div>
-            ) : workersList.length > 0 ? (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                {workersList.map(w => (
-                  <button key={w.id} onClick={() => handleWorkerSelect(w)} style={{ background: '#0f172a', border: '1px solid #334155', borderRadius: 12, padding: '14px 18px', color: 'white', fontWeight: 600, fontSize: 15, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 12, textAlign: 'left', transition: 'border-color 0.2s' }}>
-                    <div style={{ width: 36, height: 36, borderRadius: '50%', background: w.avatarUrl ? 'none' : 'linear-gradient(135deg,#10b981,#3b82f6)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 900, fontSize: 16, overflow: 'hidden' }}>
-                      {w.avatarUrl ? <img src={w.avatarUrl} alt={w.name} style={{width:'100%',height:'100%',objectFit:'cover'}}/> : w.name[0]}
-                    </div>
-                    {w.name}
-                  </button>
-                ))}
-              </div>
-            ) : (
-              <div style={{ textAlign: 'center', padding: 20, color: '#94a3b8' }}>
-                <p>No workers found.</p>
-                <p style={{fontSize:12,marginTop:8}}>Ask your admin to:</p>
-                <p style={{fontSize:11,marginTop:4}}>1. Create a user account for you</p>
-                <p style={{fontSize:11,marginTop:4}}>2. Set role to "User (Worker)"</p>
-                <p style={{fontSize:11,marginTop:4}}>3. Make sure account is "Active"</p>
-              </div>
-            )}
-            <button onClick={() => setAuthState('select')} style={{ marginTop: 20, width: '100%', background: 'transparent', border: '1px solid #334155', borderRadius: 10, padding: '11px', color: '#94a3b8', fontWeight: 600, cursor: 'pointer', fontSize: 13 }}>← Back</button>
-          </>
-        ) : (
-          <>
-            <div style={{ background: '#0f172a', borderRadius: 10, padding: '14px 16px', border: '1px solid #334155', marginBottom: 16 }}>
-              <p style={{ fontSize: 12, color: '#94a3b8', margin: '0 0 4px' }}>Logging in as</p>
-              <p style={{ fontSize: 16, fontWeight: 700, color: 'white', margin: 0 }}>{workersList.find(w => w.username === loginUsername)?.name || loginUsername}</p>
-            </div>
-            <input 
-              type="password" 
-              value={loginPassword} 
-              onChange={e => { setLoginPassword(e.target.value); setLoginError('') }}
-              onKeyDown={e => e.key === 'Enter' && handleWorkerPasswordLogin()}
-              placeholder="Enter your password"
-              style={{ width: '100%', background: '#0f172a', border: '1px solid #334155', borderRadius: 10, padding: '14px 16px', color: 'white', fontSize: 16, outline: 'none', boxSizing: 'border-box', marginBottom: 8 }}
-            />
-            {loginError && <p style={{ color: '#ef4444', fontSize: 12, marginBottom: 16 }}>{loginError}</p>}
-            <div style={{ display: 'flex', gap: 10 }}>
-              <button onClick={() => { setWorkerLoginMode('select'); setLoginUsername(''); setLoginPassword('') }} style={{ flex: 1, background: 'transparent', border: '1px solid #334155', borderRadius: 10, padding: '12px', color: '#94a3b8', fontWeight: 600, cursor: 'pointer', fontSize: 14 }}>Back</button>
-              <button onClick={handleWorkerPasswordLogin} style={{ flex: 2, background: 'linear-gradient(135deg,#10b981,#3b82f6)', border: 'none', borderRadius: 10, padding: '12px', color: 'white', fontWeight: 700, cursor: 'pointer', fontSize: 14 }}>Login</button>
-            </div>
-          </>
-        )}
+        <input 
+          type="password" 
+          value={loginPassword} 
+          onChange={e => { setLoginPassword(e.target.value); setLoginError('') }}
+          onKeyDown={e => e.key === 'Enter' && handleWorkerPasswordLogin()}
+          placeholder="Enter your password"
+          style={{ width: '100%', background: '#0f172a', border: '1px solid #334155', borderRadius: 10, padding: '14px 16px', color: 'white', fontSize: 16, outline: 'none', boxSizing: 'border-box', marginBottom: 8 }}
+        />
+        {loginError && <p style={{ color: '#ef4444', fontSize: 12, marginBottom: 16 }}>{loginError}</p>}
+        <div style={{ display: 'flex', gap: 10 }}>
+          <button onClick={() => { setAuthState('select'); setLoginUsername(''); setLoginPassword(''); setCurrentWorker(null) }} style={{ flex: 1, background: 'transparent', border: '1px solid #334155', borderRadius: 10, padding: '12px', color: '#94a3b8', fontWeight: 600, cursor: 'pointer', fontSize: 14 }}>Back</button>
+          <button onClick={handleWorkerPasswordLogin} style={{ flex: 2, background: 'linear-gradient(135deg,#10b981,#3b82f6)', border: 'none', borderRadius: 10, padding: '12px', color: 'white', fontWeight: 700, cursor: 'pointer', fontSize: 14 }}>Login</button>
+        </div>
       </div>
     </div>
   )
