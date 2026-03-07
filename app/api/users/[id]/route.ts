@@ -90,6 +90,7 @@ export async function PUT(req: NextRequest, { params }: RouteParams) {
         role: true,
         active: true,
         currency: true,
+        rates: true,
         updatedAt: true,
       },
     })
