@@ -2069,34 +2069,32 @@ const ArchiveSettings = () => {
     const saved = localStorage.getItem('smm-posts')
     return saved ? JSON.parse(saved) : []
   })
-  const [archiveCutoffMonths, setArchiveCutoffMonths] = useState(6)
   const [isCleaning, setIsCleaning] = useState(false)
   const [preview, setPreview] = useState<{total: number, toClean: number, posts: any[]}>({total: 0, toClean: 0, posts: []})
 
-  const calculateArchiveCutoff = () => {
-    const cutoff = new Date()
-    cutoff.setMonth(cutoff.getMonth() - archiveCutoffMonths)
-    return cutoff.toISOString().split('T')[0]
-  }
-
   useEffect(() => {
-    const cutoff = calculateArchiveCutoff()
-    const archived = posts.filter(p => p.scheduledDate < cutoff)
+    // Get all Results In posts, sort by date, archive beyond 8 most recent
+    const resultsInPosts = posts.filter(p => p.status === 'Results In')
+    const sorted = resultsInPosts.sort((a, b) => 
+      new Date(b.publishedDate || b.scheduledDate).getTime() - new Date(a.publishedDate || a.scheduledDate).getTime()
+    )
+    const toArchive = sorted.slice(8) // Beyond 8 most recent
+
     setPreview({
-      total: posts.length,
-      toClean: archived.length,
-      posts: archived.sort((a, b) => new Date(b.scheduledDate).getTime() - new Date(a.scheduledDate).getTime()),
+      total: resultsInPosts.length,
+      toClean: toArchive.length,
+      posts: toArchive,
     })
-  }, [posts, archiveCutoffMonths])
+  }, [posts])
 
   const handleCleanArchive = () => {
     if (!confirm(`This will remove details from ${preview.toClean} archived posts but keep their stats (impressions, leads, time spent). Continue?`)) return
 
     setIsCleaning(true)
-    const cutoff = calculateArchiveCutoff()
+    const archiveIds = new Set(preview.posts.map(p => p.id))
 
     const cleaned = posts.map(p => {
-      if (p.scheduledDate < cutoff) {
+      if (archiveIds.has(p.id)) {
         // Keep stats, remove details
         return {
           ...p,
@@ -2117,8 +2115,6 @@ const ArchiveSettings = () => {
     alert(`Cleaned ${preview.toClean} archived posts. Details removed, stats preserved.`)
   }
 
-  const cutoffDate = calculateArchiveCutoff()
-
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
       <div>
@@ -2126,27 +2122,27 @@ const ArchiveSettings = () => {
         <p style={{ color: '#64748b', fontSize: 13, margin: '0 0 20px' }}>Manage archived posts and clean up old data while preserving performance stats</p>
       </div>
 
-      {/* Archive cutoff */}
-      <div style={{ background: 'white', borderRadius: 16, padding: '24px', border: '1px solid #e2e8f0', maxWidth: 500 }}>
+      {/* Archive info */}
+      <div style={{ background: 'white', borderRadius: 16, padding: '24px', border: '1px solid #e2e8f0' }}>
         <h3 style={{ fontWeight: 900, fontSize: 16, margin: '0 0 16px', display: 'flex', alignItems: 'center', gap: 8 }}>
-          <Archive size={18} color="#6366f1"/> Archive Cutoff
+          <Archive size={18} color="#6366f1"/> How Archiving Works
         </h3>
-        <p style={{ fontSize: 13, color: '#64748b', margin: '0 0 16px' }}>
-          Posts scheduled before this period will be moved to the Archive tab.
-        </p>
-        <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
-          <select
-            value={archiveCutoffMonths}
-            onChange={e => setArchiveCutoffMonths(parseInt(e.target.value))}
-            style={{ padding: '10px 14px', border: '1px solid #e2e8f0', borderRadius: 8, fontSize: 14, background: 'white' }}
-          >
-            <option value={3}>3 months</option>
-            <option value={6}>6 months</option>
-            <option value={9}>9 months</option>
-            <option value={12}>12 months</option>
-          </select>
-          <span style={{ fontSize: 13, color: '#64748b' }}>→ Cutoff: <strong style={{ color: '#0f172a' }}>{cutoffDate}</strong></span>
+        <div style={{ display: 'flex', gap: 16, marginBottom: 16 }}>
+          <div style={{ background: '#eff6ff', borderRadius: 12, padding: '14px 18px', flex: 1 }}>
+            <p style={{ fontSize: 11, fontWeight: 700, color: '#3b82f6', textTransform: 'uppercase', margin: '0 0 4px' }}>Active Posts</p>
+            <p style={{ fontSize: 24, fontWeight: 900, color: '#1d4ed8', margin: 0 }}>8 most recent</p>
+            <p style={{ fontSize: 12, color: '#64748b', marginTop: 4 }}>Results In posts shown on Actual tab</p>
+          </div>
+          <div style={{ background: '#fef3c7', borderRadius: 12, padding: '14px 18px', flex: 1 }}>
+            <p style={{ fontSize: 11, fontWeight: 700, color: '#92400e', textTransform: 'uppercase', margin: '0 0 4px' }}>Archived</p>
+            <p style={{ fontSize: 24, fontWeight: 900, color: '#b45309', margin: 0 }}>{preview.toClean}</p>
+            <p style={{ fontSize: 12, color: '#64748b', marginTop: 4 }}>Results In posts beyond 8</p>
+          </div>
         </div>
+        <p style={{ fontSize: 13, color: '#64748b', lineHeight: 1.6 }}>
+          When a post is marked <strong>Results In</strong>, it appears in the Active list. Once you have more than 8 completed posts, 
+          the oldest ones automatically move to the <strong>Archive</strong> tab. All performance stats are preserved in both views.
+        </p>
       </div>
 
       {/* Archive preview */}
@@ -2154,16 +2150,6 @@ const ArchiveSettings = () => {
         <h3 style={{ fontWeight: 900, fontSize: 16, margin: '0 0 16px', display: 'flex', alignItems: 'center', gap: 8 }}>
           <BarChart3 size={18} color="#10b981"/> Archive Preview
         </h3>
-        <div style={{ display: 'flex', gap: 16, marginBottom: 16 }}>
-          <div style={{ background: '#f8fafc', borderRadius: 12, padding: '14px 18px', flex: 1 }}>
-            <p style={{ fontSize: 11, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', margin: '0 0 4px' }}>Total Posts</p>
-            <p style={{ fontSize: 24, fontWeight: 900, color: '#0f172a', margin: 0 }}>{preview.total}</p>
-          </div>
-          <div style={{ background: '#fef3c7', borderRadius: 12, padding: '14px 18px', flex: 1 }}>
-            <p style={{ fontSize: 11, fontWeight: 700, color: '#92400e', textTransform: 'uppercase', margin: '0 0 4px' }}>Archived</p>
-            <p style={{ fontSize: 24, fontWeight: 900, color: '#b45309', margin: 0 }}>{preview.toClean}</p>
-          </div>
-        </div>
 
         {preview.toClean > 0 ? (
           <>
@@ -2171,7 +2157,7 @@ const ArchiveSettings = () => {
             <div style={{ maxHeight: 200, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 6 }}>
               {preview.posts.slice(0, 10).map(p => (
                 <div key={p.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 12px', background: '#f8fafc', borderRadius: 8, fontSize: 12 }}>
-                  <span style={{ color: '#64748b' }}>{p.scheduledDate}</span>
+                  <span style={{ color: '#64748b' }}>{p.publishedDate || p.scheduledDate}</span>
                   <span style={{ fontWeight: 600, color: '#0f172a' }}>{p.title || 'Untitled'}</span>
                   <span style={{ color: '#94a3b8' }}>{p.platform}</span>
                 </div>
@@ -2218,14 +2204,14 @@ const ArchiveSettings = () => {
                 opacity: isCleaning ? 0.7 : 1,
               }}
             >
-              {isCleaning ? <><RefreshCw size={16} className="animate-spin"/> Cleaning...</> : <><Trash2 size={16}/> Clean Archive Details</>}
+              {isCleaning ? <><RefreshCw size={16}/> Cleaning...</> : <><Trash2 size={16}/> Clean Archive Details</>}
             </button>
           </>
         ) : (
           <div style={{ textAlign: 'center', padding: 40, color: '#94a3b8' }}>
             <Archive size={48} style={{ marginBottom: 12, opacity: 0.5 }}/>
             <p style={{ fontSize: 14, fontWeight: 600 }}>No posts to archive yet</p>
-            <p style={{ fontSize: 12, marginTop: 4 }}>Posts older than {archiveCutoffMonths} months will appear here</p>
+            <p style={{ fontSize: 12, marginTop: 4 }}>Complete 9+ posts to see older ones archived</p>
           </div>
         )}
       </div>

@@ -460,13 +460,6 @@ const PostsTab: React.FC<PostsTabProps> = ({ workers = [], isAdmin = false, arch
     setModalPost(null)
   }
 
-  // Calculate cutoff date for archive (6 months ago)
-  const archiveCutoffDate = useMemo(() => {
-    const cutoff = new Date()
-    cutoff.setMonth(cutoff.getMonth() - 6)
-    return cutoff.toISOString().split('T')[0]
-  }, [])
-
   const filtered = useMemo(() => {
     let filteredPosts = posts.filter(p => {
       if (filterPlatform !== 'All' && p.platform !== filterPlatform) return false
@@ -474,20 +467,35 @@ const PostsTab: React.FC<PostsTabProps> = ({ workers = [], isAdmin = false, arch
       return true
     })
 
-    // Filter by view mode: actual vs archive (based on scheduled date)
-    if (archiveMode === 'actual') {
-      filteredPosts = filteredPosts.filter(p => p.scheduledDate >= archiveCutoffDate)
-    } else {
-      filteredPosts = filteredPosts.filter(p => p.scheduledDate < archiveCutoffDate)
-    }
+    // Separate Results In posts from others
+    const resultsInPosts = filteredPosts.filter(p => p.status === 'Results In')
+    const otherPosts = filteredPosts.filter(p => p.status !== 'Results In')
 
-    // Sort archive by date descending (newest first)
-    if (archiveMode === 'archive') {
-      filteredPosts.sort((a, b) => new Date(b.scheduledDate).getTime() - new Date(a.scheduledDate).getTime())
+    if (archiveMode === 'actual') {
+      // ACTUAL: All non-Results-In posts + max 8 most recent Results In posts
+      const recentResultsIn = resultsInPosts
+        .sort((a, b) => new Date(b.publishedDate || b.scheduledDate).getTime() - new Date(a.publishedDate || a.scheduledDate).getTime())
+        .slice(0, 8)
+      filteredPosts = [...otherPosts, ...recentResultsIn]
+      // Sort: Draft → Scheduled → Published → Results In
+      const statusOrder: Record<string, number> = { 'Draft': 0, 'Scheduled': 1, 'Published': 2, 'Results In': 3 }
+      filteredPosts.sort((a, b) => {
+        const statusDiff = (statusOrder[a.status] || 99) - (statusOrder[b.status] || 99)
+        if (statusDiff !== 0) return statusDiff
+        return new Date(b.scheduledDate).getTime() - new Date(a.scheduledDate).getTime()
+      })
+    } else {
+      // ARCHIVE: Results In posts beyond the 8 most recent
+      const oldResultsIn = resultsInPosts
+        .sort((a, b) => new Date(b.publishedDate || b.scheduledDate).getTime() - new Date(a.publishedDate || a.scheduledDate).getTime())
+        .slice(8)
+      filteredPosts = oldResultsIn
+      // Sort archive by date descending (newest first)
+      filteredPosts.sort((a, b) => new Date(b.publishedDate || b.scheduledDate).getTime() - new Date(a.publishedDate || a.scheduledDate).getTime())
     }
 
     return filteredPosts
-  }, [posts, filterPlatform, filterStatus, archiveMode, archiveCutoffDate])
+  }, [posts, filterPlatform, filterStatus, archiveMode])
 
   const stats = useMemo(() => {
     const published = posts.filter(p => p.status === 'Results In')
@@ -513,7 +521,7 @@ const PostsTab: React.FC<PostsTabProps> = ({ workers = [], isAdmin = false, arch
           </div>
           <div style={{ flex: 1 }}>
             <p style={{ fontSize: 13, fontWeight: 700, color: '#0f172a', margin: '0 0 2px' }}>Archived Posts</p>
-            <p style={{ fontSize: 12, color: '#64748b', margin: 0 }}>Posts scheduled before <strong>{archiveCutoffDate}</strong> (6+ months ago). Stats preserved, details can be cleaned.</p>
+            <p style={{ fontSize: 12, color: '#64748b', margin: 0 }}>Completed posts beyond the 8 most recent. Stats preserved.</p>
           </div>
           <div style={{ fontSize: 12, color: '#94a3b8', fontWeight: 600 }}>
             {filtered.length} post{filtered.length !== 1 ? 's' : ''}
