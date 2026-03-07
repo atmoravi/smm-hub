@@ -3,7 +3,7 @@
 import React, { useState, useMemo } from 'react'
 import {
   Plus, Calendar, Clock, Check, X, Trash2, Filter, ChevronDown,
-  ChevronRight, Edit3, BarChart2, Target, FileText, Tag, Archive
+  ChevronRight, Edit3, BarChart2, Target, FileText, Tag, ArchiveRestore
 } from 'lucide-react'
 
 const PLATFORMS = ['Instagram', 'TikTok', 'LinkedIn', 'Facebook', 'X/Twitter', 'YouTube']
@@ -517,7 +517,7 @@ const PostsTab: React.FC<PostsTabProps> = ({ workers = [], isAdmin = false, arch
       {archiveMode === 'archive' && (
         <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 12, padding: '14px 18px', display: 'flex', alignItems: 'center', gap: 12 }}>
           <div style={{ width: 40, height: 40, borderRadius: '50%', background: '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-            <Archive size={20} color="#64748b"/>
+            <ArchiveRestore size={20} color="#64748b"/>
           </div>
           <div style={{ flex: 1 }}>
             <p style={{ fontSize: 13, fontWeight: 700, color: '#0f172a', margin: '0 0 2px' }}>Archived Posts</p>

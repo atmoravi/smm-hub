@@ -6,7 +6,7 @@ import {
   Settings, User, Globe, Zap, Layers, History, PieChart,
   Users, Key, Eye, EyeOff, Copy, Check, Shield, LogOut,
   ArrowUpRight, ArrowDownRight, Minus, RefreshCw, ChevronDown,
-  Activity, Target, AlertCircle, Lock, FileText, Archive
+  Activity, Target, AlertCircle, Lock, FileText, ArchiveRestore
 } from 'lucide-react'
 import PostsTab from './PostsTab'
 
@@ -918,7 +918,7 @@ const SmmHub = () => {
                   cursor: 'pointer',
                 }}
               >
-                <Archive size={14}/> Archive
+                <ArchiveRestore size={14}/> Archive
               </button>
               {contentSubTab === 'archive' && (
                 <button
@@ -1163,7 +1163,7 @@ const SmmHub = () => {
                   marginBottom: -1,
                 }}
               >
-                <Archive size={16}/> Archive Settings
+                <ArchiveRestore size={16}/> Archive Settings
               </button>
             </div>
 
@@ -2125,7 +2125,7 @@ const ArchiveSettings = () => {
       {/* Archive info */}
       <div style={{ background: 'white', borderRadius: 16, padding: '24px', border: '1px solid #e2e8f0' }}>
         <h3 style={{ fontWeight: 900, fontSize: 16, margin: '0 0 16px', display: 'flex', alignItems: 'center', gap: 8 }}>
-          <Archive size={18} color="#6366f1"/> How Archiving Works
+          <ArchiveRestore size={18} color="#6366f1"/> How Archiving Works
         </h3>
         <div style={{ display: 'flex', gap: 16, marginBottom: 16 }}>
           <div style={{ background: '#eff6ff', borderRadius: 12, padding: '14px 18px', flex: 1 }}>
@@ -2209,7 +2209,7 @@ const ArchiveSettings = () => {
           </>
         ) : (
           <div style={{ textAlign: 'center', padding: 40, color: '#94a3b8' }}>
-            <Archive size={48} style={{ marginBottom: 12, opacity: 0.5 }}/>
+            <ArchiveRestore size={48} style={{ marginBottom: 12, opacity: 0.5 }}/>
             <p style={{ fontSize: 14, fontWeight: 600 }}>No posts to archive yet</p>
             <p style={{ fontSize: 12, marginTop: 4 }}>Complete 9+ posts to see older ones archived</p>
           </div>
