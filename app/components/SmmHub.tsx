@@ -101,7 +101,7 @@ const SmmHub = () => {
 
   // Core state
   const [activeTab, setActiveTab] = useState('dashboard')
-  const [settingsSubTab, setSettingsSubTab] = useState<'api' | 'users'>('api') // Settings sub-tabs
+  const [settingsSubTab, setSettingsSubTab] = useState<'api' | 'users' | 'general'>('api') // Settings sub-tabs
 
   const [workers, setWorkers] = useState(() => {
     if (typeof window === 'undefined') return []
@@ -902,6 +902,26 @@ const SmmHub = () => {
               >
                 <Users size={16}/> User Management
               </button>
+              <button
+                onClick={() => setSettingsSubTab('general')}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  padding: '12px 20px',
+                  borderRadius: '10px 10px 0 0',
+                  border: 'none',
+                  background: settingsSubTab === 'general' ? 'white' : 'transparent',
+                  color: settingsSubTab === 'general' ? '#3b82f6' : '#64748b',
+                  fontWeight: settingsSubTab === 'general' ? 700 : 500,
+                  fontSize: 14,
+                  cursor: 'pointer',
+                  borderBottom: settingsSubTab === 'general' ? '2px solid #3b82f6' : '2px solid transparent',
+                  marginBottom: -1,
+                }}
+              >
+                <Settings size={16}/> General
+              </button>
             </div>
 
             {/* API Keys Tab */}
@@ -1015,6 +1035,9 @@ x-api-key: ${key.slice(0,20)}...
 
             {/* User Management Tab */}
             {settingsSubTab === 'users' && <UserManagement />}
+
+            {/* General Settings Tab */}
+            {settingsSubTab === 'general' && <GeneralSettings />}
           </div>
         )}
 
@@ -1077,15 +1100,20 @@ const UserManagement = () => {
   const [users, setUsers] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
-  const [editingUser, setEditingUser] = useState<any>(null)
   const [formData, setFormData] = useState({
     name: '',
     username: '',
     email: '',
     password: '',
     role: 'user',
-    hourlyRate: '25',
   })
+  const [editUserModal, setEditUserModal] = useState<{open: boolean, user: any, hourlyRate: string, currency: string}>({
+    open: false,
+    user: null,
+    hourlyRate: '25',
+    currency: 'EUR',
+  })
+  const [siteSettings, setSiteSettings] = useState<{siteCurrency: string}>({siteCurrency: 'EUR'})
   const [avatarPreview, setAvatarPreview] = useState<string | null>(null)
   const [avatarFile, setAvatarFile] = useState<File | null>(null)
   const [error, setError] = useState('')
@@ -1105,6 +1133,15 @@ const UserManagement = () => {
 
   useEffect(() => {
     fetchUsers()
+    // Fetch site settings
+    fetch('/api/settings/site')
+      .then(res => res.json())
+      .then(data => {
+        if (data.settings) {
+          setSiteSettings({ siteCurrency: data.settings.siteCurrency || 'EUR' })
+        }
+      })
+      .catch(err => console.error('Failed to fetch site settings:', err))
   }, [])
 
   const handleImageChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -1177,23 +1214,16 @@ const UserManagement = () => {
     setError('')
     setSuccess('')
 
-    if (!formData.name || !formData.username || !formData.email || (!formData.password && !editingUser)) {
+    if (!formData.name || !formData.username || !formData.email || !formData.password) {
       setError('Please fill in all required fields')
       return
     }
 
     try {
-      const url = editingUser ? `/api/users/${editingUser.id}` : '/api/users'
-      const method = editingUser ? 'PUT' : 'POST'
-
-      const body: any = { ...formData }
-      if (avatarPreview) body.avatarUrl = avatarPreview
-      if (!formData.password && editingUser) delete body.password
-
-      const res = await fetch(url, {
-        method,
+      const res = await fetch('/api/users', {
+        method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
+        body: JSON.stringify(formData),
       })
 
       const data = await res.json()
@@ -1203,12 +1233,11 @@ const UserManagement = () => {
         return
       }
 
-      setSuccess(editingUser ? 'User updated successfully' : 'User created successfully')
-      setFormData({ name: '', username: '', email: '', password: '', role: 'user', hourlyRate: '25' })
+      setSuccess('User created successfully')
+      setFormData({ name: '', username: '', email: '', password: '', role: 'user' })
       setAvatarPreview(null)
       setAvatarFile(null)
       setShowForm(false)
-      setEditingUser(null)
       fetchUsers()
       setTimeout(() => setSuccess(''), 3000)
     } catch (err) {
@@ -1217,17 +1246,40 @@ const UserManagement = () => {
   }
 
   const handleEdit = (user: any) => {
-    setEditingUser(user)
-    setFormData({
-      name: user.name,
-      username: user.username,
-      email: user.email,
-      password: '',
-      role: user.role,
+    setEditUserModal({
+      open: true,
+      user,
       hourlyRate: user.hourlyRate?.toString() || '25',
+      currency: user.currency || 'EUR',
     })
-    setAvatarPreview(user.avatarUrl || null)
-    setShowForm(true)
+  }
+  
+  const handleSaveUserSettings = async () => {
+    if (!editUserModal.user) return
+    setError('')
+    
+    try {
+      const res = await fetch(`/api/users/${editUserModal.user.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          hourlyRate: parseFloat(editUserModal.hourlyRate) || 25,
+          currency: editUserModal.currency,
+        }),
+      })
+      
+      if (res.ok) {
+        setSuccess('User settings updated')
+        setEditUserModal({ open: false, user: null, hourlyRate: '25', currency: 'EUR' })
+        fetchUsers()
+        setTimeout(() => setSuccess(''), 3000)
+      } else {
+        const data = await res.json()
+        setError(data.error || 'Failed to update')
+      }
+    } catch (err) {
+      setError('Failed to update user settings')
+    }
   }
 
   const handleDelete = async (id: string, name: string) => {
@@ -1275,7 +1327,7 @@ const UserManagement = () => {
           <p style={{ color: '#64748b', fontSize: 13, margin: 0 }}>Manage user accounts, roles, and permissions</p>
         </div>
         <button
-          onClick={() => { setShowForm(true); setEditingUser(null); setFormData({ name: '', username: '', email: '', password: '', role: 'user', hourlyRate: '25' }); setAvatarPreview(null) }}
+          onClick={() => { setShowForm(true); setFormData({ name: '', username: '', email: '', password: '', role: 'user' }); setAvatarPreview(null) }}
           style={{ background: 'linear-gradient(135deg,#3b82f6,#6366f1)', border: 'none', borderRadius: 10, padding: '12px 20px', color: 'white', fontWeight: 700, cursor: 'pointer', fontSize: 14, display: 'flex', alignItems: 'center', gap: 8 }}
         >
           <Plus size={18}/> Add User
@@ -1299,8 +1351,8 @@ const UserManagement = () => {
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
           <div style={{ background: 'white', borderRadius: 16, padding: 32, width: '100%', maxWidth: 480, maxHeight: '90vh', overflowY: 'auto' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
-              <h3 style={{ fontWeight: 900, fontSize: 18, margin: 0 }}>{editingUser ? 'Edit User' : 'Add New User'}</h3>
-              <button onClick={() => { setShowForm(false); setEditingUser(null); setAvatarPreview(null) }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8', padding: 4 }}>
+              <h3 style={{ fontWeight: 900, fontSize: 18, margin: 0 }}>Add New User</h3>
+              <button onClick={() => { setShowForm(false); setAvatarPreview(null) }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8', padding: 4 }}>
                 <Trash2 size={20}/>
               </button>
             </div>
@@ -1366,14 +1418,14 @@ const UserManagement = () => {
 
               {/* Password */}
               <div>
-                <label style={{ fontSize: 12, fontWeight: 700, color: '#64748b', display: 'block', marginBottom: 6 }}>Password {editingUser ? '(leave blank to keep)' : '*'}</label>
+                <label style={{ fontSize: 12, fontWeight: 700, color: '#64748b', display: 'block', marginBottom: 6 }}>Password *</label>
                 <input
                   type="password"
                   value={formData.password}
                   onChange={e => setFormData({ ...formData, password: e.target.value })}
                   style={{ width: '100%', padding: '10px 14px', border: '1px solid #e2e8f0', borderRadius: 8, fontSize: 14, boxSizing: 'border-box' }}
                   placeholder="••••••••"
-                  required={!editingUser}
+                  required
                 />
               </div>
 
@@ -1390,24 +1442,10 @@ const UserManagement = () => {
                 </select>
               </div>
 
-              {/* Hourly Rate */}
-              {formData.role === 'user' && (
-                <div>
-                  <label style={{ fontSize: 12, fontWeight: 700, color: '#64748b', display: 'block', marginBottom: 6 }}>Hourly Rate ($)</label>
-                  <input
-                    type="number"
-                    value={formData.hourlyRate}
-                    onChange={e => setFormData({ ...formData, hourlyRate: e.target.value })}
-                    style={{ width: '100%', padding: '10px 14px', border: '1px solid #e2e8f0', borderRadius: 8, fontSize: 14, boxSizing: 'border-box' }}
-                    placeholder="25"
-                  />
-                </div>
-              )}
-
               {/* Actions */}
               <div style={{ display: 'flex', gap: 10, marginTop: 8 }}>
-                <button type="button" onClick={() => { setShowForm(false); setEditingUser(null); setAvatarPreview(null) }} style={{ flex: 1, background: '#f1f5f9', border: 'none', borderRadius: 8, padding: '12px', color: '#64748b', fontWeight: 600, cursor: 'pointer', fontSize: 14 }}>Cancel</button>
-                <button type="submit" style={{ flex: 2, background: 'linear-gradient(135deg,#3b82f6,#6366f1)', border: 'none', borderRadius: 8, padding: '12px', color: 'white', fontWeight: 700, cursor: 'pointer', fontSize: 14 }}>{editingUser ? 'Update' : 'Create'} User</button>
+                <button type="button" onClick={() => { setShowForm(false); setAvatarPreview(null) }} style={{ flex: 1, background: '#f1f5f9', border: 'none', borderRadius: 8, padding: '12px', color: '#64748b', fontWeight: 600, cursor: 'pointer', fontSize: 14 }}>Cancel</button>
+                <button type="submit" style={{ flex: 2, background: 'linear-gradient(135deg,#3b82f6,#6366f1)', border: 'none', borderRadius: 8, padding: '12px', color: 'white', fontWeight: 700, cursor: 'pointer', fontSize: 14 }}>Create User</button>
               </div>
             </form>
           </div>
@@ -1469,6 +1507,140 @@ const UserManagement = () => {
             )}
           </tbody>
         </table>
+      </div>
+
+      {/* Edit User Settings Modal (Hourly Rate & Currency) */}
+      {editUserModal.open && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
+          <div style={{ background: 'white', borderRadius: 16, padding: 32, width: '100%', maxWidth: 420 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
+              <div>
+                <h3 style={{ fontWeight: 900, fontSize: 18, margin: '0 0 4px' }}>Payment Settings</h3>
+                <p style={{ fontSize: 13, color: '#64748b', margin: 0 }}>{editUserModal.user?.name}</p>
+              </div>
+              <button onClick={() => setEditUserModal({ open: false, user: null, hourlyRate: '25', currency: 'EUR' })} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8', padding: 4 }}>
+                <Trash2 size={20}/>
+              </button>
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+              {/* Hourly Rate */}
+              <div>
+                <label style={{ fontSize: 12, fontWeight: 700, color: '#64748b', display: 'block', marginBottom: 6 }}>Hourly Rate</label>
+                <div style={{ position: 'relative' }}>
+                  <span style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: '#94a3b8', fontSize: 14 }}>$</span>
+                  <input
+                    type="number"
+                    value={editUserModal.hourlyRate}
+                    onChange={e => setEditUserModal({ ...editUserModal, hourlyRate: e.target.value })}
+                    style={{ width: '100%', padding: '10px 14px 10px 28px', border: '1px solid #e2e8f0', borderRadius: 8, fontSize: 14, boxSizing: 'border-box' }}
+                    placeholder="25"
+                  />
+                </div>
+              </div>
+
+              {/* Currency */}
+              <div>
+                <label style={{ fontSize: 12, fontWeight: 700, color: '#64748b', display: 'block', marginBottom: 6 }}>Payment Currency</label>
+                <select
+                  value={editUserModal.currency}
+                  onChange={e => setEditUserModal({ ...editUserModal, currency: e.target.value })}
+                  style={{ width: '100%', padding: '10px 14px', border: '1px solid #e2e8f0', borderRadius: 8, fontSize: 14, background: 'white', boxSizing: 'border-box' }}
+                >
+                  <option value="EUR">EUR - Euro</option>
+                  <option value="USD">USD - US Dollar</option>
+                  <option value="GBP">GBP - British Pound</option>
+                  <option value="CHF">CHF - Swiss Franc</option>
+                  <option value="CAD">CAD - Canadian Dollar</option>
+                  <option value="AUD">AUD - Australian Dollar</option>
+                </select>
+                <p style={{ fontSize: 11, color: '#94a3b8', marginTop: 6 }}>Currency this user gets paid in</p>
+              </div>
+
+              {/* Actions */}
+              <div style={{ display: 'flex', gap: 10, marginTop: 8 }}>
+                <button type="button" onClick={() => setEditUserModal({ open: false, user: null, hourlyRate: '25', currency: 'EUR' })} style={{ flex: 1, background: '#f1f5f9', border: 'none', borderRadius: 8, padding: '12px', color: '#64748b', fontWeight: 600, cursor: 'pointer', fontSize: 14 }}>Cancel</button>
+                <button type="button" onClick={handleSaveUserSettings} style={{ flex: 2, background: 'linear-gradient(135deg,#3b82f6,#6366f1)', border: 'none', borderRadius: 8, padding: '12px', color: 'white', fontWeight: 700, cursor: 'pointer', fontSize: 14 }}>Save Settings</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ─── General Settings Component ────────────────────────────────────────────────
+const GeneralSettings = () => {
+  const [siteCurrency, setSiteCurrency] = useState('EUR')
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    fetch('/api/settings/site')
+      .then(res => res.json())
+      .then(data => {
+        if (data.settings?.siteCurrency) {
+          setSiteCurrency(data.settings.siteCurrency)
+        }
+        setLoading(false)
+      })
+      .catch(() => setLoading(false))
+  }, [])
+
+  const handleSave = async () => {
+    try {
+      const res = await fetch('/api/settings/site', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ siteCurrency }),
+      })
+      if (res.ok) alert('Site currency updated')
+      else alert('Failed to update site currency')
+    } catch (err) {
+      alert('Failed to update site currency')
+    }
+  }
+
+  if (loading) return <div style={{ padding: 40, textAlign: 'center', color: '#94a3b8' }}>Loading...</div>
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+      <div>
+        <h2 style={{ fontWeight: 900, fontSize: 20, margin: '0 0 6px' }}>General Settings</h2>
+        <p style={{ color: '#64748b', fontSize: 13, margin: '0 0 20px' }}>Configure site-wide settings and preferences</p>
+      </div>
+
+      {/* Site Currency */}
+      <div style={{ background: 'white', borderRadius: 16, padding: '24px', border: '1px solid #e2e8f0', maxWidth: 500 }}>
+        <h3 style={{ fontWeight: 900, fontSize: 16, margin: '0 0 16px', display: 'flex', alignItems: 'center', gap: 8 }}>
+          <DollarSign size={18} color="#3b82f6"/> Site Currency
+        </h3>
+        <p style={{ fontSize: 13, color: '#64748b', margin: '0 0 16px' }}>
+          This is the base currency for all calculations and reports in your SMM Hub.
+        </p>
+        <div style={{ display: 'flex', gap: 12 }}>
+          <select
+            value={siteCurrency}
+            onChange={e => setSiteCurrency(e.target.value)}
+            style={{ flex: 1, padding: '10px 14px', border: '1px solid #e2e8f0', borderRadius: 8, fontSize: 14, background: 'white' }}
+          >
+            <option value="EUR">EUR - Euro</option>
+            <option value="USD">USD - US Dollar</option>
+            <option value="GBP">GBP - British Pound</option>
+            <option value="CHF">CHF - Swiss Franc</option>
+            <option value="CAD">CAD - Canadian Dollar</option>
+            <option value="AUD">AUD - Australian Dollar</option>
+          </select>
+          <button
+            onClick={handleSave}
+            style={{ background: 'linear-gradient(135deg,#3b82f6,#6366f1)', border: 'none', borderRadius: 8, padding: '10px 24px', color: 'white', fontWeight: 700, cursor: 'pointer', fontSize: 14 }}
+          >
+            Save
+          </button>
+        </div>
+        <p style={{ fontSize: 11, color: '#94a3b8', marginTop: 12 }}>
+          Note: Individual workers can have different payment currencies in their user settings.
+        </p>
       </div>
     </div>
   )
