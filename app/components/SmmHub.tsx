@@ -463,6 +463,41 @@ const SmmHub = () => {
     </div>
   )
 
+  if (authState === 'worker-select') return (
+    <div style={{ minHeight: '100vh', background: '#0f172a', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: "'DM Sans', sans-serif" }}>
+      <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700;900&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet"/>
+      <div style={{ background: '#1e293b', borderRadius: 20, padding: 40, width: 380, border: '1px solid #334155' }}>
+        <Users size={32} color="#10b981" style={{marginBottom: 16}}/>
+        <h2 style={{ color: 'white', fontWeight: 900, fontSize: 22, margin: '0 0 6px' }}>Worker Login</h2>
+        <p style={{ color: '#64748b', fontSize: 13, margin: '0 0 24px' }}>Select your account</p>
+        
+        {workersLoading ? (
+          <div style={{ textAlign: 'center', padding: 20, color: '#94a3b8' }}>Loading workers...</div>
+        ) : workersList.length > 0 ? (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {workersList.map(w => (
+              <button key={w.id} onClick={() => handleWorkerSelect(w)} style={{ background: '#0f172a', border: '1px solid #334155', borderRadius: 12, padding: '14px 18px', color: 'white', fontWeight: 600, fontSize: 15, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 12, textAlign: 'left', transition: 'border-color 0.2s' }}>
+                <div style={{ width: 36, height: 36, borderRadius: '50%', background: w.avatarUrl ? 'none' : 'linear-gradient(135deg,#10b981,#3b82f6)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 900, fontSize: 16, overflow: 'hidden' }}>
+                  {w.avatarUrl ? <img src={w.avatarUrl} alt={w.name} style={{width:'100%',height:'100%',objectFit:'cover'}}/> : w.name[0]}
+                </div>
+                {w.name}
+              </button>
+            ))}
+          </div>
+        ) : (
+          <div style={{ textAlign: 'center', padding: 20, color: '#94a3b8' }}>
+            <p>No workers found.</p>
+            <p style={{fontSize:12,marginTop:8}}>Ask your admin to:</p>
+            <p style={{fontSize:11,marginTop:4}}>1. Create a user account for you</p>
+            <p style={{fontSize:11,marginTop:4}}>2. Set role to "User (Worker)"</p>
+            <p style={{fontSize:11,marginTop:4}}>3. Make sure account is "Active"</p>
+          </div>
+        )}
+        <button onClick={() => setAuthState('select')} style={{ marginTop: 20, width: '100%', background: 'transparent', border: '1px solid #334155', borderRadius: 10, padding: '11px', color: '#94a3b8', fontWeight: 600, cursor: 'pointer', fontSize: 13 }}>← Back</button>
+      </div>
+    </div>
+  )
+
   if (authState === 'worker-login') return (
     <div style={{ minHeight: '100vh', background: '#0f172a', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: "'DM Sans', sans-serif" }}>
       <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700;900&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet"/>
