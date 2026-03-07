@@ -179,11 +179,13 @@ const SmmHub = () => {
       fetch('/api/auth/workers')
         .then(res => res.json())
         .then(data => {
+          console.log('[worker-select] Loaded workers:', data.workers)
           setWorkersList(data.workers || [])
           setWorkersLoading(false)
           setAuthState('worker-select')
         })
-        .catch(() => {
+        .catch((err) => {
+          console.error('[worker-select] Failed to load workers:', err)
           setWorkersLoading(false)
           setAuthState('worker-select')
         })
@@ -491,7 +493,10 @@ const SmmHub = () => {
             ) : (
               <div style={{ textAlign: 'center', padding: 20, color: '#94a3b8' }}>
                 <p>No workers found.</p>
-                <p style={{fontSize:12,marginTop:8}}>Ask your admin to create a worker account.</p>
+                <p style={{fontSize:12,marginTop:8}}>Ask your admin to:</p>
+                <p style={{fontSize:11,marginTop:4}}>1. Create a user account for you</p>
+                <p style={{fontSize:11,marginTop:4}}>2. Set role to "User (Worker)"</p>
+                <p style={{fontSize:11,marginTop:4}}>3. Make sure account is "Active"</p>
               </div>
             )}
             <button onClick={() => setAuthState('select')} style={{ marginTop: 20, width: '100%', background: 'transparent', border: '1px solid #334155', borderRadius: 10, padding: '11px', color: '#94a3b8', fontWeight: 600, cursor: 'pointer', fontSize: 13 }}>← Back</button>

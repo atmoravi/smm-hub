@@ -69,21 +69,25 @@ export async function POST(req: NextRequest) {
 // GET /api/auth/workers - List active workers (for login dropdown)
 export async function GET(req: NextRequest) {
   try {
-    const workers = await prisma.user.findMany({
-      where: { 
+    const users = await prisma.user.findMany({
+      where: {
         active: true,
-        role: 'user' // Only return regular users (workers), not admins
+        role: {
+          in: ['user', 'admin'] // Allow both roles to log in as workers
+        }
       },
       select: {
         id: true,
         name: true,
         username: true,
         avatarUrl: true,
+        role: true,
       },
       orderBy: { name: 'asc' },
     })
 
-    return NextResponse.json({ workers })
+    console.log('[auth/workers] Found users:', users.length)
+    return NextResponse.json({ workers: users })
   } catch (err) {
     console.error('[auth/workers]', err)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
