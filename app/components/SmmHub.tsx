@@ -11,6 +11,7 @@ import {
 import PostsTab from './PostsTab'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
+// Version: 2026-03-07-fix-310
 const TASK_CATEGORIES = [
   "Content Creation", "Engagement/Community Mgmt", "Strategy & Planning",
   "Analytics & Reporting", "Ad Management", "Client Meetings", "Admin/Misc"
@@ -103,6 +104,7 @@ const SmmHub = () => {
   // Core state
   const [activeTab, setActiveTab] = useState('dashboard')
   const [settingsSubTab, setSettingsSubTab] = useState<'api' | 'users' | 'general' | 'archive'>('api') // Settings sub-tabs
+  const [contentSubTab, setContentSubTab] = useState<'actual' | 'archive'>('actual') // Content sub-tabs - MUST be here for hooks order
 
   const [workers, setWorkers] = useState(() => {
     if (typeof window === 'undefined') return []
@@ -577,9 +579,6 @@ const SmmHub = () => {
 
   const tabLabels = { dashboard: 'Dashboard', content: 'Content', traffic: 'Traffic', workers: 'Workers', settings: 'Settings', history: 'History', effort: 'Log Effort' }
   const tabIcons = { dashboard: <BarChart3 size={14}/>, content: <FileText size={14}/>, traffic: <Globe size={14}/>, workers: <Users size={14}/>, settings: <Settings size={14}/>, history: <History size={14}/>, effort: <Layers size={14}/> }
-
-  // Content sub-tabs: actual vs archive
-  const [contentSubTab, setContentSubTab] = useState<'actual' | 'archive'>('actual')
 
   return (
     <div style={{ minHeight: '100vh', background: '#f8fafc', fontFamily: "'DM Sans', sans-serif", color: '#0f172a' }}>
