@@ -27,7 +27,7 @@ export async function POST(req: NextRequest) {
         avatarUrl: true,
         role: true,
         active: true,
-        password: true, // Need password for comparison
+        password: true,
       },
     })
 
@@ -56,40 +56,12 @@ export async function POST(req: NextRequest) {
 
     // Return user data (without password)
     const { password: _, ...userWithoutPassword } = user
-    return NextResponse.json({ 
-      success: true, 
-      user: userWithoutPassword 
+    return NextResponse.json({
+      success: true,
+      user: userWithoutPassword
     })
   } catch (err) {
     console.error('[auth/login]', err)
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
-  }
-}
-
-// GET /api/auth/workers - List active workers (for login dropdown)
-export async function GET(req: NextRequest) {
-  try {
-    const users = await prisma.user.findMany({
-      where: {
-        active: true,
-        role: {
-          in: ['user', 'admin'] // Allow both roles to log in as workers
-        }
-      },
-      select: {
-        id: true,
-        name: true,
-        username: true,
-        avatarUrl: true,
-        role: true,
-      },
-      orderBy: { name: 'asc' },
-    })
-
-    console.log('[auth/workers] Found users:', users.length)
-    return NextResponse.json({ workers: users })
-  } catch (err) {
-    console.error('[auth/workers]', err)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }

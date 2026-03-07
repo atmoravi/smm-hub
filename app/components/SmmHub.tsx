@@ -177,7 +177,10 @@ const SmmHub = () => {
       // Fetch workers from database
       setWorkersLoading(true)
       fetch('/api/auth/workers')
-        .then(res => res.json())
+        .then(res => {
+          console.log('[worker-select] Response status:', res.status)
+          return res.json()
+        })
         .then(data => {
           console.log('[worker-select] Loaded workers:', data.workers)
           setWorkersList(data.workers || [])
