@@ -1,5 +1,6 @@
 // app/api/settings/keys/route.ts
 import { NextRequest, NextResponse } from 'next/server'
+import { randomBytes } from 'crypto'
 import { prisma } from '@/lib/prisma'
 
 // GET /api/settings/keys - Get all API keys (admin only in real app)
@@ -30,7 +31,7 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    const generateKey = () => 'sk-smm-' + Array.from({length: 32}, () => Math.random().toString(36)[2]).join('')
+    const generateKey = () => 'sk-smm-' + randomBytes(24).toString('hex')
     const newKey = generateKey()
 
     const updated = await prisma.apiKey.update({
@@ -38,9 +39,9 @@ export async function POST(req: NextRequest) {
       data: { key: newKey },
     })
 
-    return NextResponse.json({ 
-      success: true, 
-      source: updated.source, 
+    return NextResponse.json({
+      success: true,
+      source: updated.source,
       key: updated.key,
       message: 'Key rotated successfully. Update your external services with the new key.',
     })

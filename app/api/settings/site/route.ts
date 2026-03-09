@@ -1,6 +1,11 @@
 // app/api/settings/site/route.ts
-import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest } from 'next/server'
+import { z } from 'zod'
 import { prisma } from '@/lib/prisma'
+
+const UpdateSiteSchema = z.object({
+  siteCurrency: z.string().min(1).optional(),
+})
 
 // GET /api/settings/site - Get site settings
 export async function GET() {
@@ -9,7 +14,7 @@ export async function GET() {
       select: { key: true, value: true, updatedAt: true },
     })
 
-    const settingsObj: Record<string, any> = {}
+    const settingsObj: Record<string, unknown> = {}
     for (const s of settings) {
       try {
         settingsObj[s.key] = JSON.parse(s.value)
@@ -23,10 +28,10 @@ export async function GET() {
       settingsObj.siteCurrency = 'EUR'
     }
 
-    return NextResponse.json({ settings: settingsObj })
+    return Response.json({ data: settingsObj })
   } catch (err) {
     console.error('[settings/site GET]', err)
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+    return Response.json({ error: { message: 'Internal server error', code: 'INTERNAL_ERROR' } }, { status: 500 })
   }
 }
 
@@ -34,9 +39,16 @@ export async function GET() {
 export async function PUT(req: NextRequest) {
   try {
     const body = await req.json()
-    const { siteCurrency } = body
+    const parsed = UpdateSiteSchema.safeParse(body)
+    if (!parsed.success) {
+      return Response.json(
+        { error: { message: 'Invalid input', code: 'INVALID_INPUT', issues: parsed.error.issues } },
+        { status: 422 }
+      )
+    }
 
-    const updates: Promise<any>[] = []
+    const { siteCurrency } = parsed.data
+    const updates: Promise<unknown>[] = []
 
     if (siteCurrency !== undefined) {
       updates.push(
@@ -50,9 +62,9 @@ export async function PUT(req: NextRequest) {
 
     await Promise.all(updates)
 
-    return NextResponse.json({ success: true, siteCurrency })
+    return Response.json({ data: { siteCurrency } })
   } catch (err) {
     console.error('[settings/site PUT]', err)
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+    return Response.json({ error: { message: 'Internal server error', code: 'INTERNAL_ERROR' } }, { status: 500 })
   }
 }

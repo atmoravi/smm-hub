@@ -1,33 +1,44 @@
 // app/api/leads/organic/route.ts
-import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest } from 'next/server'
+import { z } from 'zod'
 import { prisma } from '@/lib/prisma'
 import { validateApiKey } from '@/lib/auth'
 
+const OrganicLeadSchema = z.object({
+  date: z.string().min(1),
+  count: z.number().int().min(0),
+  campaign: z.string().min(1),
+})
+
 // POST /api/leads/organic
 // Headers: x-api-key: sk-smm-...
-// Body: { date: "2026-03-06", count: 14, campaign?: "Spring Push" }
+// Body: { date: "2026-03-06", count: 14, campaign: "Spring Push" }
 export async function POST(req: NextRequest) {
   const auth = await validateApiKey(req, 'organicLeads')
   if (!auth.valid) {
-    return NextResponse.json({ error: auth.error }, { status: 401 })
+    return Response.json(
+      { error: { message: auth.error, code: 'UNAUTHORIZED' } },
+      { status: 401 }
+    )
   }
 
   try {
     const body = await req.json()
-    const { date, count, campaign } = body
-
-    if (!date || typeof count !== 'number' || count < 0) {
-      return NextResponse.json(
-        { error: 'Required: date (ISO string), count (number)' },
-        { status: 400 }
+    const result = OrganicLeadSchema.safeParse(body)
+    if (!result.success) {
+      return Response.json(
+        { error: { message: 'Invalid input', code: 'INVALID_INPUT', issues: result.error.issues } },
+        { status: 422 }
       )
     }
+
+    const { date, count, campaign } = result.data
 
     // Upsert into today's traffic log for this campaign
     const existing = await prisma.trafficLog.findFirst({
       where: {
         date: new Date(date),
-        campaignName: campaign ?? 'API',
+        campaignName: campaign,
       },
     })
 
@@ -41,7 +52,7 @@ export async function POST(req: NextRequest) {
       record = await prisma.trafficLog.create({
         data: {
           date: new Date(date),
-          campaignName: campaign ?? 'API',
+          campaignName: campaign,
           organicLeads: count,
           paidLeads: 0,
           adSpend: 0,
@@ -50,10 +61,13 @@ export async function POST(req: NextRequest) {
       })
     }
 
-    return NextResponse.json({ success: true, record }, { status: 200 })
+    return Response.json({ data: record }, { status: 200 })
   } catch (err) {
     console.error('[organic leads]', err)
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+    return Response.json(
+      { error: { message: 'Internal server error', code: 'INTERNAL_ERROR' } },
+      { status: 500 }
+    )
   }
 }
 
@@ -61,7 +75,10 @@ export async function POST(req: NextRequest) {
 export async function GET(req: NextRequest) {
   const auth = await validateApiKey(req, 'organicLeads')
   if (!auth.valid) {
-    return NextResponse.json({ error: auth.error }, { status: 401 })
+    return Response.json(
+      { error: { message: auth.error, code: 'UNAUTHORIZED' } },
+      { status: 401 }
+    )
   }
 
   const { searchParams } = new URL(req.url)
@@ -77,5 +94,5 @@ export async function GET(req: NextRequest) {
     select: { date: true, campaignName: true, organicLeads: true },
   })
 
-  return NextResponse.json({ logs })
+  return Response.json({ data: logs })
 }

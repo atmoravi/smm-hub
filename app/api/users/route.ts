@@ -1,7 +1,19 @@
 // app/api/users/route.ts
-import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest } from 'next/server'
+import { z } from 'zod'
 import { prisma } from '@/lib/prisma'
 import bcrypt from 'bcryptjs'
+
+const CreateUserSchema = z.object({
+  name: z.string().min(1).max(100),
+  username: z.string().min(3).max(50).regex(/^[a-zA-Z0-9_]+$/, 'Username can only contain letters, numbers, underscores'),
+  email: z.string().email(),
+  password: z.string().min(8, 'Password must be at least 8 characters'),
+  role: z.enum(['user', 'admin']).default('user'),
+  avatarUrl: z.string().url().nullable().optional(),
+  currency: z.string().default('EUR'),
+  rates: z.record(z.string(), z.number()).optional().default({}),
+})
 
 // GET /api/users - List all users
 export async function GET(req: NextRequest) {
@@ -23,10 +35,10 @@ export async function GET(req: NextRequest) {
       orderBy: { createdAt: 'desc' },
     })
 
-    return NextResponse.json({ users })
+    return Response.json({ data: users })
   } catch (err) {
     console.error('[users GET]', err)
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+    return Response.json({ error: { message: 'Internal server error', code: 'INTERNAL_SERVER_ERROR' } }, { status: 500 })
   }
 }
 
@@ -34,46 +46,37 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json()
-    const { name, username, email, password, role = 'user', avatarUrl, currency = 'EUR', rates } = body
-
-    // Validation
-    if (!name || !username || !email || !password) {
-      return NextResponse.json(
-        { error: 'Missing required fields: name, username, email, password' },
-        { status: 400 }
+    const parsed = CreateUserSchema.safeParse(body)
+    if (!parsed.success) {
+      return Response.json(
+        { error: { message: 'Validation failed', code: 'VALIDATION_ERROR', details: parsed.error.flatten().fieldErrors } },
+        { status: 422 }
       )
     }
 
-    // Check if username or email already exists
-    const existing = await prisma.user.findFirst({
-      where: {
-        OR: [{ username }, { email }],
-      },
-    })
+    const { name, username, email, password, role, avatarUrl, currency, rates } = parsed.data
 
+    const existing = await prisma.user.findFirst({ where: { OR: [{ username }, { email }] } })
     if (existing) {
-      return NextResponse.json(
-        { error: existing.username === username ? 'Username already taken' : 'Email already registered' },
+      const isDuplicateUsername = existing.username === username
+      return Response.json(
+        { error: { message: isDuplicateUsername ? 'Username already taken' : 'Email already registered', code: isDuplicateUsername ? 'USERNAME_TAKEN' : 'EMAIL_TAKEN' } },
         { status: 409 }
       )
     }
 
-    // Hash password
     const hashedPassword = await bcrypt.hash(password, 10)
-
-    // Default rates if not provided
     const defaultRates = {
-      "Content Creation": 25,
-      "Engagement/Community Mgmt": 25,
-      "Strategy & Planning": 25,
-      "Analytics & Reporting": 25,
-      "Ad Management": 25,
-      "Client Meetings": 25,
-      "Admin/Misc": 25,
+      'Content Creation': 25,
+      'Engagement/Community Mgmt': 25,
+      'Strategy & Planning': 25,
+      'Analytics & Reporting': 25,
+      'Ad Management': 25,
+      'Client Meetings': 25,
+      'Admin/Misc': 25,
     }
-    const userRates = rates || defaultRates
+    const userRates: Record<string, number> = Object.keys(rates).length > 0 ? rates : defaultRates
 
-    // Create user
     const user = await prisma.user.create({
       data: {
         name,
@@ -81,8 +84,8 @@ export async function POST(req: NextRequest) {
         email,
         password: hashedPassword,
         role,
-        avatarUrl: avatarUrl || null,
-        currency: currency || 'EUR',
+        avatarUrl: avatarUrl ?? null,
+        currency,
         rates: userRates,
       },
       select: {
@@ -98,9 +101,9 @@ export async function POST(req: NextRequest) {
       },
     })
 
-    return NextResponse.json({ success: true, user }, { status: 201 })
+    return Response.json({ data: user }, { status: 201 })
   } catch (err) {
     console.error('[users POST]', err)
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+    return Response.json({ error: { message: 'Internal server error', code: 'INTERNAL_SERVER_ERROR' } }, { status: 500 })
   }
 }

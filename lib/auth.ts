@@ -1,4 +1,5 @@
 // lib/auth.ts
+import 'server-only'
 import { prisma } from './prisma'
 import { NextRequest } from 'next/server'
 

@@ -1,11 +1,10 @@
 // app/api/auth/workers/route.ts
-import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 
 // GET /api/auth/workers - List active workers (for login dropdown)
 export async function GET() {
   try {
-    const users = await prisma.user.findMany({
+    const workers = await prisma.user.findMany({
       where: {
         active: true,
         role: {
@@ -22,10 +21,12 @@ export async function GET() {
       orderBy: { name: 'asc' },
     })
 
-    console.log('[auth/workers] Found users:', users.length)
-    return NextResponse.json({ workers: users })
+    return Response.json({ data: workers })
   } catch (err) {
     console.error('[auth/workers]', err)
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+    return Response.json(
+      { error: { message: 'Internal server error', code: 'INTERNAL_ERROR' } },
+      { status: 500 }
+    )
   }
 }

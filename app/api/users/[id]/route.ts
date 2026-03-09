@@ -1,17 +1,25 @@
 // app/api/users/[id]/route.ts
-import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest } from 'next/server'
+import { z } from 'zod'
 import { prisma } from '@/lib/prisma'
 import bcrypt from 'bcryptjs'
 
-interface RouteParams {
-  params: Promise<{ id: string }>
-}
+const UpdateUserSchema = z.object({
+  name: z.string().min(1).max(100).optional(),
+  email: z.string().email().optional(),
+  username: z.string().min(3).max(50).optional(),
+  password: z.string().min(8).optional(),
+  role: z.enum(['user', 'admin']).optional(),
+  active: z.boolean().optional(),
+  currency: z.string().optional(),
+  rates: z.record(z.string(), z.number()).optional(),
+  avatarUrl: z.string().url().nullable().optional(),
+})
 
-// GET /api/users/[id] - Get a specific user
-export async function GET(req: NextRequest, { params }: RouteParams) {
+// GET /api/users/[id]
+export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await params
-    
     const user = await prisma.user.findUnique({
       where: { id },
       select: {
@@ -26,53 +34,56 @@ export async function GET(req: NextRequest, { params }: RouteParams) {
         updatedAt: true,
       },
     })
-
     if (!user) {
-      return NextResponse.json({ error: 'User not found' }, { status: 404 })
+      return Response.json({ error: { message: 'User not found', code: 'USER_NOT_FOUND' } }, { status: 404 })
     }
-
-    return NextResponse.json({ user })
+    return Response.json({ data: user })
   } catch (err) {
     console.error('[user GET]', err)
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+    return Response.json({ error: { message: 'Internal server error', code: 'INTERNAL_SERVER_ERROR' } }, { status: 500 })
   }
 }
 
-// PUT /api/users/[id] - Update a user
-export async function PUT(req: NextRequest, { params }: RouteParams) {
+// PUT /api/users/[id]
+export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await params
     const body = await req.json()
-    const { name, username, email, password, role, avatarUrl, active, currency, rates } = body
-
-    // Check if user exists
-    const existing = await prisma.user.findUnique({ where: { id } })
-    if (!existing) {
-      return NextResponse.json({ error: 'User not found' }, { status: 404 })
+    const parsed = UpdateUserSchema.safeParse(body)
+    if (!parsed.success) {
+      return Response.json(
+        { error: { message: 'Validation failed', code: 'VALIDATION_ERROR', details: parsed.error.flatten().fieldErrors } },
+        { status: 422 }
+      )
     }
 
-    // Check if new username/email conflicts with another user
+    const { name, username, email, password, role, avatarUrl, active, currency, rates } = parsed.data
+
+    const existing = await prisma.user.findUnique({ where: { id } })
+    if (!existing) {
+      return Response.json({ error: { message: 'User not found', code: 'USER_NOT_FOUND' } }, { status: 404 })
+    }
+
     if (username && username !== existing.username) {
       const usernameTaken = await prisma.user.findFirst({ where: { username } })
       if (usernameTaken) {
-        return NextResponse.json({ error: 'Username already taken' }, { status: 409 })
+        return Response.json({ error: { message: 'Username already taken', code: 'USERNAME_TAKEN' } }, { status: 409 })
       }
     }
 
     if (email && email !== existing.email) {
       const emailTaken = await prisma.user.findFirst({ where: { email } })
       if (emailTaken) {
-        return NextResponse.json({ error: 'Email already registered' }, { status: 409 })
+        return Response.json({ error: { message: 'Email already registered', code: 'EMAIL_TAKEN' } }, { status: 409 })
       }
     }
 
-    // Build update data
-    const updateData: any = {}
-    if (name) updateData.name = name
-    if (username) updateData.username = username
-    if (email) updateData.email = email
-    if (password) updateData.password = await bcrypt.hash(password, 10)
-    if (role) updateData.role = role
+    const updateData: Record<string, unknown> = {}
+    if (name !== undefined) updateData.name = name
+    if (username !== undefined) updateData.username = username
+    if (email !== undefined) updateData.email = email
+    if (password !== undefined) updateData.password = await bcrypt.hash(password, 10)
+    if (role !== undefined) updateData.role = role
     if (avatarUrl !== undefined) updateData.avatarUrl = avatarUrl
     if (active !== undefined) updateData.active = active
     if (currency !== undefined) updateData.currency = currency
@@ -95,28 +106,25 @@ export async function PUT(req: NextRequest, { params }: RouteParams) {
       },
     })
 
-    return NextResponse.json({ success: true, user })
+    return Response.json({ data: user })
   } catch (err) {
     console.error('[user PUT]', err)
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+    return Response.json({ error: { message: 'Internal server error', code: 'INTERNAL_SERVER_ERROR' } }, { status: 500 })
   }
 }
 
-// DELETE /api/users/[id] - Delete a user
-export async function DELETE(req: NextRequest, { params }: RouteParams) {
+// DELETE /api/users/[id]
+export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await params
-    
     const existing = await prisma.user.findUnique({ where: { id } })
     if (!existing) {
-      return NextResponse.json({ error: 'User not found' }, { status: 404 })
+      return Response.json({ error: { message: 'User not found', code: 'USER_NOT_FOUND' } }, { status: 404 })
     }
-
     await prisma.user.delete({ where: { id } })
-
-    return NextResponse.json({ success: true, message: 'User deleted' })
+    return Response.json({ data: { message: 'User deleted' } })
   } catch (err) {
     console.error('[user DELETE]', err)
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+    return Response.json({ error: { message: 'Internal server error', code: 'INTERNAL_SERVER_ERROR' } }, { status: 500 })
   }
 }
