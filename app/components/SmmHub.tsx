@@ -103,8 +103,9 @@ const SmmHub = () => {
 
   // Core state
   const [activeTab, setActiveTab] = useState('dashboard')
-  const [settingsSubTab, setSettingsSubTab] = useState<'api' | 'users' | 'general' | 'archive'>('api') // Settings sub-tabs
+  const [settingsSubTab, setSettingsSubTab] = useState<'api' | 'users' | 'general' | 'archive' | 'meta'>('api') // Settings sub-tabs
   const [contentSubTab, setContentSubTab] = useState<'actual' | 'archive'>('actual') // Content sub-tabs - MUST be here for hooks order
+  const [trafficSubTab, setTrafficSubTab] = useState<'results' | 'campaigns'>('results')
 
   const [workers, setWorkers] = useState(() => {
     if (typeof window === 'undefined') return []
@@ -1011,6 +1012,16 @@ const SmmHub = () => {
 
         {/* ── TRAFFIC ── */}
         {activeTab === 'traffic' && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+            {/* Traffic sub-tabs */}
+            <div style={{ display: 'flex', gap: 8 }}>
+              {(['results', 'campaigns'] as const).map(tab => (
+                <button key={tab} onClick={() => setTrafficSubTab(tab)} style={{ padding: '8px 20px', borderRadius: 8, border: trafficSubTab === tab ? 'none' : '1px solid #e2e8f0', background: trafficSubTab === tab ? '#0f172a' : 'white', color: trafficSubTab === tab ? 'white' : '#64748b', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
+                  {tab === 'results' ? 'Results' : 'Campaigns'}
+                </button>
+              ))}
+            </div>
+          {trafficSubTab === 'results' && (
           <div style={{ display: 'grid', gridTemplateColumns: '360px 1fr', gap: 20 }}>
             <div style={{ background: 'white', borderRadius: 16, padding: '24px', border: '1px solid #e2e8f0' }}>
               <h2 style={{ fontWeight: 900, fontSize: 16, color: '#10b981', margin: '0 0 18px', display: 'flex', alignItems: 'center', gap: 8 }}><Globe size={18}/> Submit Traffic Data</h2>
@@ -1080,6 +1091,9 @@ const SmmHub = () => {
                 </div>
               </div>
             </div>
+          </div>
+          )}
+          {trafficSubTab === 'campaigns' && <CampaignsTab />}
           </div>
         )}
 
@@ -1184,6 +1198,26 @@ const SmmHub = () => {
                 }}
               >
                 <ArchiveRestore size={16}/> Archive Settings
+              </button>
+              <button
+                onClick={() => setSettingsSubTab('meta')}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  padding: '12px 20px',
+                  borderRadius: '10px 10px 0 0',
+                  border: 'none',
+                  background: settingsSubTab === 'meta' ? 'white' : 'transparent',
+                  color: settingsSubTab === 'meta' ? '#3b82f6' : '#64748b',
+                  fontWeight: settingsSubTab === 'meta' ? 700 : 500,
+                  fontSize: 14,
+                  cursor: 'pointer',
+                  borderBottom: settingsSubTab === 'meta' ? '2px solid #3b82f6' : '2px solid transparent',
+                  marginBottom: -1,
+                }}
+              >
+                <Globe size={16}/> Meta Ads
               </button>
             </div>
 
@@ -1304,6 +1338,9 @@ x-api-key: ${key.slice(0,20)}...
 
             {/* Archive Settings Tab */}
             {settingsSubTab === 'archive' && <ArchiveSettings />}
+
+            {/* Meta Ads Tab */}
+            {settingsSubTab === 'meta' && <MetaAdsSettings />}
           </div>
         )}
 
@@ -2104,6 +2141,281 @@ const GeneralSettings = () => {
           Note: Individual workers can have different payment currencies in their user settings.
         </p>
       </div>
+    </div>
+  )
+}
+
+// ─── Meta Ads Settings Component ───────────────────────────────────────────────
+const MetaAdsSettings = () => {
+  const [creds, setCreds] = useState({ metaToken: '', metaAdAccountId: '', metaApiVersion: 'v21.0' })
+  const [showToken, setShowToken] = useState(false)
+  const [campaigns, setCampaigns] = useState<any[]>([])
+  const [credsSaving, setCredsSaving] = useState(false)
+  const [credsMsg, setCredsMsg] = useState('')
+  const [showForm, setShowForm] = useState(false)
+  const [form, setForm] = useState({ label: '', metaCampaignNames: '', adsetNames: '', active: true })
+  const [copiedId, setCopiedId] = useState<string | null>(null)
+
+  useEffect(() => {
+    fetch('/api/settings/site').then(r => r.json()).then(d => {
+      const s = d.data || {}
+      setCreds({ metaToken: s.metaToken || '', metaAdAccountId: s.metaAdAccountId || '', metaApiVersion: s.metaApiVersion || 'v21.0' })
+    })
+    fetchCampaigns()
+  }, [])
+
+  const fetchCampaigns = () => {
+    fetch('/api/meta/settings').then(r => r.json()).then(d => setCampaigns(d.data || []))
+  }
+
+  const saveCreds = async () => {
+    setCredsSaving(true)
+    setCredsMsg('')
+    const res = await fetch('/api/settings/site', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(creds) })
+    setCredsSaving(false)
+    setCredsMsg(res.ok ? 'Saved!' : 'Failed to save')
+    setTimeout(() => setCredsMsg(''), 3000)
+  }
+
+  const addCampaign = async () => {
+    const payload = {
+      label: form.label.trim(),
+      metaCampaignNames: form.metaCampaignNames.split(',').map(s => s.trim()).filter(Boolean),
+      adsetNames: form.adsetNames.split('\n').map(s => s.trim()).filter(Boolean),
+      active: form.active,
+    }
+    const res = await fetch('/api/meta/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
+    if (res.ok) { setShowForm(false); setForm({ label: '', metaCampaignNames: '', adsetNames: '', active: true }); fetchCampaigns() }
+  }
+
+  const deleteCampaign = async (id: string) => {
+    await fetch(`/api/meta/settings/${id}`, { method: 'DELETE' })
+    fetchCampaigns()
+  }
+
+  const copySecret = (secret: string, id: string) => {
+    navigator.clipboard.writeText(secret)
+    setCopiedId(id)
+    setTimeout(() => setCopiedId(null), 2000)
+  }
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+      <div>
+        <h2 style={{ fontWeight: 900, fontSize: 20, margin: '0 0 6px' }}>Meta Ads Integration</h2>
+        <p style={{ color: '#64748b', fontSize: 13, margin: 0 }}>Connect your Meta ad account to auto-sync daily spend. One token with <code>ads_read</code> covers all levels.</p>
+      </div>
+
+      {/* Credentials */}
+      <div style={{ background: 'white', borderRadius: 16, border: '1px solid #e2e8f0', padding: 24 }}>
+        <h3 style={{ fontWeight: 800, fontSize: 15, margin: '0 0 16px' }}>API Credentials</h3>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <div>
+            <label style={{ fontSize: 12, fontWeight: 700, color: '#64748b', display: 'block', marginBottom: 4 }}>Access Token</label>
+            <div style={{ position: 'relative' }}>
+              <input type={showToken ? 'text' : 'password'} value={creds.metaToken} onChange={e => setCreds({ ...creds, metaToken: e.target.value })} placeholder="EAAxxxxxxx..." style={{ width: '100%', padding: '10px 42px 10px 14px', border: '1px solid #e2e8f0', borderRadius: 8, fontSize: 13, boxSizing: 'border-box' }}/>
+              <button type="button" onClick={() => setShowToken(v => !v)} style={{ position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8', display: 'flex' }}>
+                {showToken ? <EyeOff size={15}/> : <Eye size={15}/>}
+              </button>
+            </div>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+            <div>
+              <label style={{ fontSize: 12, fontWeight: 700, color: '#64748b', display: 'block', marginBottom: 4 }}>Ad Account ID</label>
+              <input value={creds.metaAdAccountId} onChange={e => setCreds({ ...creds, metaAdAccountId: e.target.value })} placeholder="123456789" style={{ width: '100%', padding: '10px 14px', border: '1px solid #e2e8f0', borderRadius: 8, fontSize: 13, boxSizing: 'border-box' }}/>
+            </div>
+            <div>
+              <label style={{ fontSize: 12, fontWeight: 700, color: '#64748b', display: 'block', marginBottom: 4 }}>API Version</label>
+              <input value={creds.metaApiVersion} onChange={e => setCreds({ ...creds, metaApiVersion: e.target.value })} placeholder="v21.0" style={{ width: '100%', padding: '10px 14px', border: '1px solid #e2e8f0', borderRadius: 8, fontSize: 13, boxSizing: 'border-box' }}/>
+            </div>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <button onClick={saveCreds} disabled={credsSaving} style={{ background: 'linear-gradient(135deg,#3b82f6,#6366f1)', border: 'none', borderRadius: 8, padding: '10px 24px', color: 'white', fontWeight: 700, cursor: 'pointer', fontSize: 13 }}>
+              {credsSaving ? 'Saving...' : 'Save Credentials'}
+            </button>
+            {credsMsg && <span style={{ fontSize: 13, color: credsMsg === 'Saved!' ? '#10b981' : '#ef4444', fontWeight: 600 }}>{credsMsg}</span>}
+          </div>
+        </div>
+      </div>
+
+      {/* Campaign Configs */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <h3 style={{ fontWeight: 800, fontSize: 15, margin: 0 }}>Campaign Configs</h3>
+          <button onClick={() => setShowForm(v => !v)} style={{ background: '#0f172a', border: 'none', borderRadius: 8, padding: '8px 16px', color: 'white', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>+ Add Campaign</button>
+        </div>
+
+        {showForm && (
+          <div style={{ background: 'white', borderRadius: 16, border: '1px solid #3b82f6', padding: 20, display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <div>
+              <label style={{ fontSize: 12, fontWeight: 700, color: '#64748b', display: 'block', marginBottom: 4 }}>Label (your name for this campaign)</label>
+              <input value={form.label} onChange={e => setForm({ ...form, label: e.target.value })} placeholder="Offer 2 Spring" style={{ width: '100%', padding: '10px 14px', border: '1px solid #e2e8f0', borderRadius: 8, fontSize: 13, boxSizing: 'border-box' }}/>
+            </div>
+            <div>
+              <label style={{ fontSize: 12, fontWeight: 700, color: '#64748b', display: 'block', marginBottom: 4 }}>Meta Campaign Names <span style={{ fontWeight: 400, color: '#94a3b8' }}>(comma-separated, up to 2 — exact names from Meta)</span></label>
+              <input value={form.metaCampaignNames} onChange={e => setForm({ ...form, metaCampaignNames: e.target.value })} placeholder="Campaign A, Campaign B" style={{ width: '100%', padding: '10px 14px', border: '1px solid #e2e8f0', borderRadius: 8, fontSize: 13, boxSizing: 'border-box' }}/>
+            </div>
+            <div>
+              <label style={{ fontSize: 12, fontWeight: 700, color: '#64748b', display: 'block', marginBottom: 4 }}>Ad Set Names to Track <span style={{ fontWeight: 400, color: '#94a3b8' }}>(one per line, up to 10)</span></label>
+              <textarea value={form.adsetNames} onChange={e => setForm({ ...form, adsetNames: e.target.value })} rows={4} placeholder={"AdSet 1\nAdSet 2"} style={{ width: '100%', padding: '10px 14px', border: '1px solid #e2e8f0', borderRadius: 8, fontSize: 13, boxSizing: 'border-box', resize: 'vertical' }}/>
+            </div>
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button onClick={() => setShowForm(false)} style={{ flex: 1, background: '#f1f5f9', border: 'none', borderRadius: 8, padding: '10px', color: '#64748b', fontWeight: 600, cursor: 'pointer', fontSize: 13 }}>Cancel</button>
+              <button onClick={addCampaign} style={{ flex: 2, background: 'linear-gradient(135deg,#3b82f6,#6366f1)', border: 'none', borderRadius: 8, padding: '10px', color: 'white', fontWeight: 700, cursor: 'pointer', fontSize: 13 }}>Save Campaign</button>
+            </div>
+          </div>
+        )}
+
+        {campaigns.length === 0 ? (
+          <div style={{ background: 'white', borderRadius: 16, border: '1px solid #e2e8f0', padding: '40px 20px', textAlign: 'center', color: '#94a3b8', fontSize: 13 }}>No campaign configs yet. Click "Add Campaign" to create one.</div>
+        ) : (
+          campaigns.map(c => (
+            <div key={c.id} style={{ background: 'white', borderRadius: 16, border: '1px solid #e2e8f0', padding: 20 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                <div>
+                  <div style={{ fontWeight: 800, fontSize: 15, marginBottom: 4 }}>{c.label}</div>
+                  <div style={{ fontSize: 12, color: '#64748b', marginBottom: 4 }}>
+                    <span style={{ fontWeight: 700 }}>Campaigns:</span> {(c.metaCampaignNames as string[]).join(', ')}
+                  </div>
+                  {(c.adsetNames as string[]).length > 0 && (
+                    <div style={{ fontSize: 12, color: '#64748b' }}>
+                      <span style={{ fontWeight: 700 }}>Ad Sets:</span> {(c.adsetNames as string[]).join(', ')}
+                    </div>
+                  )}
+                </div>
+                <button onClick={() => deleteCampaign(c.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#cbd5e1' }}><Trash2 size={14}/></button>
+              </div>
+              <div style={{ marginTop: 12, display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span style={{ fontSize: 11, fontWeight: 700, color: '#94a3b8' }}>WEBHOOK SECRET</span>
+                <code style={{ fontSize: 11, background: '#f8fafc', padding: '4px 8px', borderRadius: 6, color: '#475569', letterSpacing: 1 }}>{c.webhookSecret.slice(0, 8)}•••</code>
+                <button onClick={() => copySecret(c.webhookSecret, c.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: copiedId === c.id ? '#10b981' : '#94a3b8', display: 'flex', alignItems: 'center', gap: 4, fontSize: 12 }}>
+                  {copiedId === c.id ? <><Check size={12}/> Copied</> : <><Copy size={12}/> Copy</>}
+                </button>
+              </div>
+            </div>
+          ))
+        )}
+      </div>
+    </div>
+  )
+}
+
+// ─── Campaigns Tab Component ────────────────────────────────────────────────────
+const CampaignsTab = () => {
+  const [data, setData] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
+  const [syncing, setSyncing] = useState(false)
+  const [expandedId, setExpandedId] = useState<string | null>(null)
+  const [range, setRange] = useState<'week' | 'month' | 'all'>('month')
+
+  const fetchStats = async () => {
+    setLoading(true)
+    const now = new Date()
+    let from = ''
+    if (range === 'week') { const d = new Date(now); d.setDate(d.getDate() - 7); from = d.toISOString().split('T')[0] }
+    if (range === 'month') { from = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0] }
+    const qs = from ? `?from=${from}` : ''
+    const res = await fetch(`/api/meta/stats${qs}`)
+    const json = await res.json()
+    setData(json.data || [])
+    setLoading(false)
+  }
+
+  useEffect(() => { fetchStats() }, [range])
+
+  const syncNow = async () => {
+    setSyncing(true)
+    await fetch('/api/meta/sync', { method: 'POST' })
+    await fetchStats()
+    setSyncing(false)
+  }
+
+  const fmtMoney = (n: number) => n == null ? '—' : `$${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+  const fmtX = (n: number | null) => n == null ? '—' : `${n}x`
+
+  const colStyle = { padding: '11px 14px', fontSize: 13 }
+  const thStyle = { padding: '9px 14px', textAlign: 'left' as const, fontSize: 11, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase' as const }
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div style={{ display: 'flex', gap: 8 }}>
+          {(['week', 'month', 'all'] as const).map(r => (
+            <button key={r} onClick={() => setRange(r)} style={{ padding: '7px 16px', borderRadius: 8, border: range === r ? 'none' : '1px solid #e2e8f0', background: range === r ? '#0f172a' : 'white', color: range === r ? 'white' : '#64748b', fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>
+              {r === 'week' ? 'This Week' : r === 'month' ? 'This Month' : 'All Time'}
+            </button>
+          ))}
+        </div>
+        <button onClick={syncNow} disabled={syncing} style={{ background: 'linear-gradient(135deg,#3b82f6,#6366f1)', border: 'none', borderRadius: 8, padding: '8px 20px', color: 'white', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
+          {syncing ? 'Syncing...' : '↻ Sync Now'}
+        </button>
+      </div>
+
+      {loading ? (
+        <div style={{ textAlign: 'center', padding: 60, color: '#94a3b8' }}>Loading campaigns...</div>
+      ) : data.length === 0 ? (
+        <div style={{ background: 'white', borderRadius: 16, border: '1px solid #e2e8f0', padding: '60px 20px', textAlign: 'center', color: '#94a3b8', fontSize: 13 }}>
+          No campaign data yet. Configure campaigns in Settings → Meta Ads, then click Sync Now.
+        </div>
+      ) : (
+        data.map(campaign => (
+          <div key={campaign.id} style={{ background: 'white', borderRadius: 16, border: '1px solid #e2e8f0', overflow: 'hidden' }}>
+            <div style={{ padding: '14px 20px', borderBottom: '1px solid #f1f5f9', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ fontWeight: 800, fontSize: 15 }}>{campaign.label}</span>
+              <button onClick={() => setExpandedId(expandedId === campaign.id ? null : campaign.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#64748b', fontSize: 12, fontWeight: 700 }}>
+                {expandedId === campaign.id ? '▲ Hide Ad Sets' : '▼ Show Ad Sets'}
+              </button>
+            </div>
+            <div style={{ overflowX: 'auto' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                <thead><tr style={{ background: '#f8fafc' }}>
+                  {['Date', 'Ad Spend', 'Leads', 'CPL', 'Purchases', 'Revenue', 'ROAS'].map(h => <th key={h} style={thStyle}>{h}</th>)}
+                </tr></thead>
+                <tbody>
+                  {campaign.summary.length === 0 ? (
+                    <tr><td colSpan={7} style={{ ...colStyle, textAlign: 'center', color: '#94a3b8' }}>No data for this period</td></tr>
+                  ) : campaign.summary.map((row: any) => (
+                    <tr key={row.date} style={{ borderTop: '1px solid #f1f5f9' }}>
+                      <td style={colStyle}>{row.date}</td>
+                      <td style={{ ...colStyle, color: '#f59e0b', fontWeight: 700 }}>{fmtMoney(row.spend)}</td>
+                      <td style={{ ...colStyle, fontWeight: 700 }}>{row.leads}</td>
+                      <td style={colStyle}>{fmtMoney(row.cpl)}</td>
+                      <td style={{ ...colStyle, fontWeight: 700 }}>{row.purchases}</td>
+                      <td style={{ ...colStyle, color: '#10b981', fontWeight: 700 }}>{fmtMoney(row.revenue)}</td>
+                      <td style={{ ...colStyle, color: row.roas >= 1 ? '#10b981' : '#ef4444', fontWeight: 700 }}>{fmtX(row.roas)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {expandedId === campaign.id && campaign.adsets.length > 0 && (
+              <div style={{ borderTop: '2px solid #f1f5f9' }}>
+                <div style={{ padding: '10px 20px', background: '#f8fafc', fontSize: 11, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase' }}>Ad Set Breakdown</div>
+                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                  <thead><tr style={{ background: '#f8fafc' }}>
+                    {['Ad Set', 'Date', 'Spend', 'Leads', 'CPL', 'Purchases', 'Revenue', 'ROAS'].map(h => <th key={h} style={thStyle}>{h}</th>)}
+                  </tr></thead>
+                  <tbody>
+                    {campaign.adsets.map((row: any, i: number) => (
+                      <tr key={i} style={{ borderTop: '1px solid #f1f5f9' }}>
+                        <td style={{ ...colStyle, fontWeight: 600, color: '#475569' }}>{row.adsetName}</td>
+                        <td style={colStyle}>{row.date}</td>
+                        <td style={{ ...colStyle, color: '#f59e0b', fontWeight: 700 }}>{fmtMoney(row.spend)}</td>
+                        <td style={{ ...colStyle, fontWeight: 700 }}>{row.leads}</td>
+                        <td style={colStyle}>{fmtMoney(row.cpl)}</td>
+                        <td style={{ ...colStyle, fontWeight: 700 }}>{row.purchases}</td>
+                        <td style={{ ...colStyle, color: '#10b981', fontWeight: 700 }}>{fmtMoney(row.revenue)}</td>
+                        <td style={{ ...colStyle, color: row.roas >= 1 ? '#10b981' : '#ef4444', fontWeight: 700 }}>{fmtX(row.roas)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        ))
+      )}
     </div>
   )
 }

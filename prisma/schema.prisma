@@ -69,7 +69,47 @@ model User {
 
 model SiteSettings {
   id        String   @id @default(cuid())
-  key       String   @unique // e.g., "siteCurrency", "currencyRates"
+  key       String   @unique // e.g., "siteCurrency", "metaToken", "metaAdAccountId", "metaApiVersion"
   value     String   // JSON string
   updatedAt DateTime @updatedAt
+}
+
+model MetaSettings {
+  id                String   @id @default(cuid())
+  label             String
+  metaCampaignNames Json     // string[] up to 2
+  adsetNames        Json     // string[] up to 10
+  webhookSecret     String
+  active            Boolean  @default(true)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  spendLogs  MetaSpendLog[]
+  dailyStats MetaDailyStats[]
+}
+
+model MetaSpendLog {
+  id             String       @id @default(cuid())
+  date           DateTime
+  metaSettingsId String
+  adsetName      String       @default("") // "" = campaign total
+  spend          Float        @default(0)
+  syncedAt       DateTime     @default(now()) @updatedAt
+  settings       MetaSettings @relation(fields: [metaSettingsId], references: [id], onDelete: Cascade)
+
+  @@unique([date, metaSettingsId, adsetName])
+}
+
+model MetaDailyStats {
+  id             String       @id @default(cuid())
+  date           DateTime
+  metaSettingsId String
+  adsetName      String       @default("") // "" = campaign total
+  adId           String       @default("") // "" = not ad-level
+  leadCount      Int          @default(0)
+  purchaseCount  Int          @default(0)
+  revenue        Float        @default(0)
+  settings       MetaSettings @relation(fields: [metaSettingsId], references: [id], onDelete: Cascade)
+
+  @@unique([date, metaSettingsId, adsetName, adId])
 }
