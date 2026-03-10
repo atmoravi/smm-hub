@@ -113,7 +113,7 @@ const SmmHub = () => {
   })
 
   const [logs, setLogs] = useState(() => { if (typeof window === 'undefined') return []; const s = localStorage.getItem('smm-logs2'); return s ? JSON.parse(s) : [] })
-  const [trafficLogs, setTrafficLogs] = useState(() => { if (typeof window === 'undefined') return []; const s = localStorage.getItem('smm-traffic2'); return s ? JSON.parse(s) : [] })
+  const [trafficLogs, setTrafficLogs] = useState<any[]>([])
   const [salesLogs, setSalesLogs] = useState(() => { if (typeof window === 'undefined') return []; const s = localStorage.getItem('smm-sales2'); return s ? JSON.parse(s) : [] })
   const [endpoints, setEndpoints] = useState(() => { if (typeof window === 'undefined') return INITIAL_ENDPOINTS; const s = localStorage.getItem('smm-endpoints'); return s ? JSON.parse(s) : INITIAL_ENDPOINTS })
   const [settings, setSettings] = useState(() => { if (typeof window === 'undefined') return { targets: {} }; const s = localStorage.getItem('smm-settings2'); return s ? JSON.parse(s) : { targets: TASK_CATEGORIES.reduce((a,c)=>({...a,[c]:10}),{}) } })
@@ -158,10 +158,9 @@ const SmmHub = () => {
   useEffect(() => {
     if (typeof window === 'undefined') return
     localStorage.setItem('smm-workers', JSON.stringify(workers))
-    localStorage.setItem('smm-traffic2', JSON.stringify(trafficLogs))
     localStorage.setItem('smm-sales2', JSON.stringify(salesLogs))
     localStorage.setItem('smm-settings2', JSON.stringify(settings))
-  }, [workers, trafficLogs, salesLogs, settings])
+  }, [workers, salesLogs, settings])
   
   // Fetch effort logs when worker logs in
   useEffect(() => {
@@ -169,6 +168,16 @@ const SmmHub = () => {
       fetchEffortLogs()
     }
   }, [currentWorker, authState])
+
+  // Fetch traffic logs for both admin and workers
+  useEffect(() => {
+    if (authState === 'app') {
+      fetch('/api/traffic')
+        .then(res => res.json())
+        .then(data => setTrafficLogs(data.data || []))
+        .catch(err => console.error('[traffic] Failed to load:', err))
+    }
+  }, [authState])
 
   // Fetch workers list when admin logs in
   useEffect(() => {
@@ -306,14 +315,26 @@ const SmmHub = () => {
     }
   }
 
-  const addTrafficLog = () => {
-    setTrafficLogs(prev => [{
-      id: generateId(), date: currentDate, ...trafficData,
-      organicLeads: parseInt(trafficData.organicLeads) || 0,
-      paidLeads: parseInt(trafficData.paidLeads) || 0,
-      adSpend: parseFloat(trafficData.adSpend) || 0,
-    }, ...prev])
-    setTrafficData({ organicLeads: '', paidLeads: '', adSpend: '', campaignName: '' })
+  const addTrafficLog = async () => {
+    try {
+      await fetch('/api/traffic', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          date: currentDate,
+          campaignName: trafficData.campaignName,
+          organicLeads: parseInt(trafficData.organicLeads) || 0,
+          paidLeads: parseInt(trafficData.paidLeads) || 0,
+          adSpend: parseFloat(trafficData.adSpend) || 0,
+        }),
+      })
+      setTrafficData({ organicLeads: '', paidLeads: '', adSpend: '', campaignName: '' })
+      const res = await fetch('/api/traffic')
+      const data = await res.json()
+      setTrafficLogs(data.data || [])
+    } catch (err) {
+      console.error('[traffic] Failed to save:', err)
+    }
   }
 
   const addSalesLog = () => {
