@@ -21,7 +21,7 @@ export async function GET() {
       orderBy: { name: 'asc' },
     })
 
-    return Response.json({ data: workers })
+    return Response.json({ workers })
   } catch (err) {
     console.error('[auth/workers]', err)
     return Response.json(

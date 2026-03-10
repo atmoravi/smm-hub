@@ -1379,7 +1379,7 @@ const UserManagement = () => {
     try {
       const res = await fetch('/api/users')
       const data = await res.json()
-      setUsers(data.users || [])
+      setUsers(data.data || [])
     } catch (err) {
       console.error('Failed to fetch users:', err)
     } finally {
@@ -1485,7 +1485,7 @@ const UserManagement = () => {
       const data = await res.json()
 
       if (!res.ok) {
-        setError(data.error || 'Failed to save user')
+        setError(data.error?.message || 'Failed to save user')
         return
       }
 
