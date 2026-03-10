@@ -234,13 +234,13 @@ const SmmHub = () => {
         body: JSON.stringify({ username: loginUsername, password: loginPassword }),
       })
       const data = await res.json()
-      if (res.ok && data.user) {
-        setCurrentWorker(data.user)
+      if (res.ok && data.data?.user) {
+        setCurrentWorker(data.data.user)
         setAuthState('app')
         setLoginPassword('')
         setLoginError('')
       } else {
-        setLoginError(data.error || 'Login failed')
+        setLoginError(data.error?.message || 'Login failed')
       }
     } catch (err) {
       setLoginError('Login failed. Please try again.')
@@ -299,8 +299,8 @@ const SmmHub = () => {
       const res = await fetch(`/api/effort?userId=${currentWorker.id}`)
       const data = await res.json()
       // Store in localStorage for offline viewing
-      localStorage.setItem('smm-logs2', JSON.stringify(data.logs || []))
-      setLogs(data.logs || [])
+      localStorage.setItem('smm-logs2', JSON.stringify(data.data?.logs || []))
+      setLogs(data.data?.logs || [])
     } catch (err) {
       console.error('Failed to fetch logs:', err)
     }
@@ -1535,7 +1535,7 @@ const UserManagement = () => {
         setTimeout(() => setSuccess(''), 3000)
       } else {
         const data = await res.json()
-        setError(data.error || 'Failed to update')
+        setError(data.error?.message || 'Failed to update')
       }
     } catch (err) {
       setError('Failed to update rates')
@@ -1560,7 +1560,7 @@ const UserManagement = () => {
         setTimeout(() => setSuccess(''), 3000)
       } else {
         const data = await res.json()
-        setError(data.error || 'Failed to update')
+        setError(data.error?.message || 'Failed to update')
       }
     } catch (err) {
       setError('Failed to update currency')
@@ -1600,7 +1600,7 @@ const UserManagement = () => {
         setTimeout(() => setSuccess(''), 3000)
       } else {
         const data = await res.json()
-        setError(data.error || 'Failed to update')
+        setError(data.error?.message || 'Failed to update')
       }
     } catch (err) {
       setError('Failed to update user details')
