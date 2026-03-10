@@ -1592,7 +1592,7 @@ const UserManagement = () => {
         body: JSON.stringify({
           name: editUserDetailsModal.name,
           email: editUserDetailsModal.email,
-          avatarUrl: avatarPreview || editUserDetailsModal.avatarUrl,
+          avatarUrl: avatarPreview || editUserDetailsModal.avatarUrl || null,
           ...(editUserDetailsModal.newPassword ? { password: editUserDetailsModal.newPassword } : {}),
         }),
       })
