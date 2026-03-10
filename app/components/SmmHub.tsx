@@ -1362,13 +1362,15 @@ const UserManagement = () => {
     user: null,
     currency: 'EUR',
   })
-  const [editUserDetailsModal, setEditUserDetailsModal] = useState<{open: boolean, user: any, name: string, email: string, avatarUrl: string}>({
+  const [editUserDetailsModal, setEditUserDetailsModal] = useState<{open: boolean, user: any, name: string, email: string, avatarUrl: string, newPassword: string}>({
     open: false,
     user: null,
     name: '',
     email: '',
     avatarUrl: '',
+    newPassword: '',
   })
+  const [showNewPassword, setShowNewPassword] = useState(false)
   const [siteSettings, setSiteSettings] = useState<{siteCurrency: string}>({siteCurrency: 'EUR'})
   const [avatarPreview, setAvatarPreview] = useState<string | null>(null)
   const [avatarFile, setAvatarFile] = useState<File | null>(null)
@@ -1574,7 +1576,9 @@ const UserManagement = () => {
       name: user.name || '',
       email: user.email || '',
       avatarUrl: user.avatarUrl || '',
+      newPassword: '',
     })
+    setShowNewPassword(false)
   }
 
   const handleSaveUserDetails = async () => {
@@ -1589,12 +1593,13 @@ const UserManagement = () => {
           name: editUserDetailsModal.name,
           email: editUserDetailsModal.email,
           avatarUrl: avatarPreview || editUserDetailsModal.avatarUrl,
+          ...(editUserDetailsModal.newPassword ? { password: editUserDetailsModal.newPassword } : {}),
         }),
       })
 
       if (res.ok) {
         setSuccess('User details updated')
-        setEditUserDetailsModal({ open: false, user: null, name: '', email: '', avatarUrl: '' })
+        setEditUserDetailsModal({ open: false, user: null, name: '', email: '', avatarUrl: '', newPassword: '' })
         setAvatarPreview(null)
         fetchUsers()
         setTimeout(() => setSuccess(''), 3000)
@@ -1926,7 +1931,7 @@ const UserManagement = () => {
           <div style={{ background: 'white', borderRadius: 16, padding: 32, width: '100%', maxWidth: 480, maxHeight: '90vh', overflowY: 'auto' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
               <h3 style={{ fontWeight: 900, fontSize: 18, margin: 0 }}>Edit User Details</h3>
-              <button onClick={() => { setEditUserDetailsModal({ open: false, user: null, name: '', email: '', avatarUrl: '' }); setAvatarPreview(null) }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8', padding: 4 }}>
+              <button onClick={() => { setEditUserDetailsModal({ open: false, user: null, name: '', email: '', avatarUrl: '', newPassword: '' }); setAvatarPreview(null) }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8', padding: 4 }}>
                 <Trash2 size={20}/>
               </button>
             </div>
@@ -1972,9 +1977,30 @@ const UserManagement = () => {
                 />
               </div>
 
+              {/* New Password */}
+              <div>
+                <label style={{ fontSize: 12, fontWeight: 700, color: '#64748b', display: 'block', marginBottom: 6 }}>New Password <span style={{ fontWeight: 400, color: '#94a3b8' }}>(leave blank to keep current)</span></label>
+                <div style={{ position: 'relative' }}>
+                  <input
+                    type={showNewPassword ? 'text' : 'password'}
+                    value={editUserDetailsModal.newPassword}
+                    onChange={e => setEditUserDetailsModal({ ...editUserDetailsModal, newPassword: e.target.value })}
+                    placeholder="Enter new password"
+                    style={{ width: '100%', padding: '10px 42px 10px 14px', border: '1px solid #e2e8f0', borderRadius: 8, fontSize: 14, boxSizing: 'border-box' }}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowNewPassword(v => !v)}
+                    style={{ position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8', padding: 0, display: 'flex', alignItems: 'center' }}
+                  >
+                    {showNewPassword ? <EyeOff size={16}/> : <Eye size={16}/>}
+                  </button>
+                </div>
+              </div>
+
               {/* Actions */}
               <div style={{ display: 'flex', gap: 10, marginTop: 8 }}>
-                <button type="button" onClick={() => { setEditUserDetailsModal({ open: false, user: null, name: '', email: '', avatarUrl: '' }); setAvatarPreview(null) }} style={{ flex: 1, background: '#f1f5f9', border: 'none', borderRadius: 8, padding: '12px', color: '#64748b', fontWeight: 600, cursor: 'pointer', fontSize: 14 }}>Cancel</button>
+                <button type="button" onClick={() => { setEditUserDetailsModal({ open: false, user: null, name: '', email: '', avatarUrl: '', newPassword: '' }); setAvatarPreview(null) }} style={{ flex: 1, background: '#f1f5f9', border: 'none', borderRadius: 8, padding: '12px', color: '#64748b', fontWeight: 600, cursor: 'pointer', fontSize: 14 }}>Cancel</button>
                 <button type="button" onClick={handleSaveUserDetails} style={{ flex: 2, background: 'linear-gradient(135deg,#3b82f6,#6366f1)', border: 'none', borderRadius: 8, padding: '12px', color: 'white', fontWeight: 700, cursor: 'pointer', fontSize: 14 }}>Save Changes</button>
               </div>
             </div>
