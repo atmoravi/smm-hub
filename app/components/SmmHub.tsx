@@ -11,6 +11,13 @@ import {
 } from 'lucide-react'
 import PostsTab from './PostsTab'
 
+// ─── Types ────────────────────────────────────────────────────────────────────
+interface LogEntry {
+  time: string
+  level: 'info' | 'success' | 'error' | 'warn'
+  message: string
+}
+
 // ─── Constants ────────────────────────────────────────────────────────────────
 // Version: 2026-03-07-fix-310
 const TASK_CATEGORIES = [
@@ -104,7 +111,10 @@ const SmmHub = () => {
 
   // Core state
   const [activeTab, setActiveTab] = useState('dashboard')
-  const [settingsSubTab, setSettingsSubTab] = useState<'api' | 'users' | 'general' | 'archive' | 'meta'>('api') // Settings sub-tabs
+  const [settingsSubTab, setSettingsSubTab] = useState<'api' | 'users' | 'general' | 'archive' | 'meta' | 'log'>('api') // Settings sub-tabs
+  const [activityLogs, setActivityLogs] = useState<LogEntry[]>([])
+  const addActivityLog = (level: LogEntry['level'], message: string) =>
+    setActivityLogs(prev => [...prev, { time: new Date().toLocaleTimeString(), level, message }])
   const [contentSubTab, setContentSubTab] = useState<'actual' | 'archive'>('actual') // Content sub-tabs - MUST be here for hooks order
   const [trafficSubTab, setTrafficSubTab] = useState<'results' | 'campaigns'>('results')
 
@@ -1119,7 +1129,7 @@ const SmmHub = () => {
             </div>
           </div>
           )}
-          {trafficSubTab === 'campaigns' && <CampaignsTab />}
+          {trafficSubTab === 'campaigns' && <CampaignsTab onLog={addActivityLog} />}
           </div>
         )}
 
@@ -1245,6 +1255,26 @@ const SmmHub = () => {
               >
                 <Globe size={16}/> Meta Ads
               </button>
+              <button
+                onClick={() => setSettingsSubTab('log')}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  padding: '12px 20px',
+                  borderRadius: '10px 10px 0 0',
+                  border: 'none',
+                  background: settingsSubTab === 'log' ? 'white' : 'transparent',
+                  color: settingsSubTab === 'log' ? '#3b82f6' : '#64748b',
+                  fontWeight: settingsSubTab === 'log' ? 700 : 500,
+                  fontSize: 14,
+                  cursor: 'pointer',
+                  borderBottom: settingsSubTab === 'log' ? '2px solid #3b82f6' : '2px solid transparent',
+                  marginBottom: -1,
+                }}
+              >
+                <Activity size={16}/> Log
+              </button>
             </div>
 
             {/* API Keys Tab */}
@@ -1366,7 +1396,10 @@ x-api-key: ${key.slice(0,20)}...
             {settingsSubTab === 'archive' && <ArchiveSettings />}
 
             {/* Meta Ads Tab */}
-            {settingsSubTab === 'meta' && <MetaAdsSettings />}
+            {settingsSubTab === 'meta' && <MetaAdsSettings onLog={addActivityLog} />}
+
+            {/* Activity Log Tab */}
+            {settingsSubTab === 'log' && <ActivityLogPanel logs={activityLogs} onClear={() => setActivityLogs([])} />}
           </div>
         )}
 
@@ -2261,7 +2294,8 @@ const GeneralSettings = () => {
 }
 
 // ─── Meta Ads Settings Component ───────────────────────────────────────────────
-const MetaAdsSettings = () => {
+const MetaAdsSettings = ({ onLog }: { onLog?: (level: LogEntry['level'], msg: string) => void }) => {
+  const log = onLog ?? (() => {})
   const [creds, setCreds] = useState({ metaToken: '', metaAdAccountId: '', metaApiVersion: 'v21.0' })
   const [showToken, setShowToken] = useState(false)
   const [campaigns, setCampaigns] = useState<any[]>([])
@@ -2286,9 +2320,16 @@ const MetaAdsSettings = () => {
   const saveCreds = async () => {
     setCredsSaving(true)
     setCredsMsg('')
+    log('info', 'Saving Meta credentials...')
     const res = await fetch('/api/settings/site', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(creds) })
     setCredsSaving(false)
-    setCredsMsg(res.ok ? 'Saved!' : 'Failed to save')
+    if (res.ok) {
+      setCredsMsg('Saved!')
+      log('success', 'Meta credentials saved successfully')
+    } else {
+      setCredsMsg('Failed to save')
+      log('error', 'Failed to save Meta credentials')
+    }
     setTimeout(() => setCredsMsg(''), 3000)
   }
 
@@ -2416,7 +2457,8 @@ const MetaAdsSettings = () => {
 }
 
 // ─── Campaigns Tab Component ────────────────────────────────────────────────────
-const CampaignsTab = () => {
+const CampaignsTab = ({ onLog }: { onLog?: (level: LogEntry['level'], msg: string) => void }) => {
+  const log = onLog ?? (() => {})
   const [data, setData] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [syncing, setSyncing] = useState(false)
@@ -2440,7 +2482,18 @@ const CampaignsTab = () => {
 
   const syncNow = async () => {
     setSyncing(true)
-    await fetch('/api/meta/sync', { method: 'POST' })
+    log('info', 'Starting Meta API sync...')
+    try {
+      const res = await fetch('/api/meta/sync', { method: 'POST' })
+      const json = await res.json()
+      if (res.ok) {
+        log('success', `Sync complete — ${json.data?.upserts ?? 0} records upserted`)
+      } else {
+        log('error', `Sync failed: ${json.error?.message ?? `HTTP ${res.status}`}`)
+      }
+    } catch (err) {
+      log('error', `Sync error: ${String(err)}`)
+    }
     await fetchStats()
     setSyncing(false)
   }
@@ -2688,6 +2741,51 @@ const ArchiveSettings = () => {
           </div>
         )}
       </div>
+    </div>
+  )
+}
+
+// ─── Activity Log Panel Component ────────────────────────────────────────────
+const ActivityLogPanel = ({ logs, onClear }: { logs: LogEntry[], onClear: () => void }) => {
+  const levelColors: Record<LogEntry['level'], { bg: string; text: string; label: string }> = {
+    info:    { bg: '#eff6ff', text: '#3b82f6', label: 'INFO' },
+    success: { bg: '#f0fdf4', text: '#16a34a', label: 'OK' },
+    warn:    { bg: '#fefce8', text: '#ca8a04', label: 'WARN' },
+    error:   { bg: '#fef2f2', text: '#ef4444', label: 'ERROR' },
+  }
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div>
+          <h2 style={{ fontWeight: 900, fontSize: 20, margin: '0 0 6px' }}>Activity Log</h2>
+          <p style={{ color: '#64748b', fontSize: 13, margin: 0 }}>Real-time debug log for Meta API and settings changes</p>
+        </div>
+        <button onClick={onClear} style={{ background: '#0f172a', border: 'none', borderRadius: 8, padding: '8px 16px', color: 'white', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>EMPTY LOG</button>
+      </div>
+
+      {logs.length === 0 ? (
+        <div style={{ background: 'white', borderRadius: 16, border: '1px solid #e2e8f0', padding: '40px 20px', textAlign: 'center', color: '#94a3b8', fontSize: 13 }}>
+          <Activity size={32} style={{ marginBottom: 12, opacity: 0.3 }}/>
+          <p>No activity logged yet</p>
+          <p style={{ fontSize: 12, marginTop: 4 }}>Try saving Meta credentials or syncing campaigns</p>
+        </div>
+      ) : (
+        <div style={{ background: 'white', borderRadius: 16, border: '1px solid #e2e8f0', overflow: 'hidden', maxHeight: '500px', overflowY: 'auto' }}>
+          {[...logs].reverse().map((entry, i) => {
+            const colors = levelColors[entry.level]
+            return (
+              <div key={i} style={{ padding: '12px 16px', borderBottom: i === logs.length - 1 ? 'none' : '1px solid #f1f5f9', display: 'flex', gap: 12, alignItems: 'flex-start' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: '110px' }}>
+                  <code style={{ fontSize: 11, fontWeight: 600, color: '#64748b', fontFamily: 'monospace' }}>{entry.time}</code>
+                </div>
+                <div style={{ background: colors.bg, color: colors.text, padding: '2px 8px', borderRadius: 4, fontSize: 10, fontWeight: 700, minWidth: '50px', textAlign: 'center' }}>{colors.label}</div>
+                <div style={{ flex: 1, fontSize: 13, color: '#475569', wordBreak: 'break-word' }}>{entry.message}</div>
+              </div>
+            )
+          })}
+        </div>
+      )}
     </div>
   )
 }
