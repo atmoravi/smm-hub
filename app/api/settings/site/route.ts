@@ -8,6 +8,8 @@ const UpdateSiteSchema = z.object({
   metaToken: z.string().optional(),
   metaAdAccountId: z.string().optional(),
   metaApiVersion: z.string().optional(),
+  companyName: z.string().optional(),
+  companyLogo: z.string().url().optional().nullable(),
 })
 
 // GET /api/settings/site - Get site settings
@@ -50,7 +52,7 @@ export async function PUT(req: NextRequest) {
       )
     }
 
-    const { siteCurrency, metaToken, metaAdAccountId, metaApiVersion } = parsed.data
+    const { siteCurrency, metaToken, metaAdAccountId, metaApiVersion, companyName, companyLogo } = parsed.data
     const updates: Promise<unknown>[] = []
 
     if (siteCurrency !== undefined) {
@@ -64,6 +66,12 @@ export async function PUT(req: NextRequest) {
     }
     if (metaApiVersion !== undefined) {
       updates.push(prisma.siteSettings.upsert({ where: { key: 'metaApiVersion' }, update: { value: JSON.stringify(metaApiVersion) }, create: { key: 'metaApiVersion', value: JSON.stringify(metaApiVersion) } }))
+    }
+    if (companyName !== undefined) {
+      updates.push(prisma.siteSettings.upsert({ where: { key: 'companyName' }, update: { value: JSON.stringify(companyName) }, create: { key: 'companyName', value: JSON.stringify(companyName) } }))
+    }
+    if (companyLogo !== undefined) {
+      updates.push(prisma.siteSettings.upsert({ where: { key: 'companyLogo' }, update: { value: JSON.stringify(companyLogo) }, create: { key: 'companyLogo', value: JSON.stringify(companyLogo) } }))
     }
 
     await Promise.all(updates)

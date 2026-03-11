@@ -6,7 +6,8 @@ import {
   Settings, User, Globe, Zap, Layers, History, PieChart,
   Users, Key, Eye, EyeOff, Copy, Check, Shield, LogOut,
   ArrowUpRight, ArrowDownRight, Minus, RefreshCw, ChevronDown,
-  Activity, Target, AlertCircle, Lock, FileText, ArchiveRestore
+  Activity, Target, AlertCircle, Lock, FileText, ArchiveRestore,
+  Building
 } from 'lucide-react'
 import PostsTab from './PostsTab'
 
@@ -106,6 +107,21 @@ const SmmHub = () => {
   const [settingsSubTab, setSettingsSubTab] = useState<'api' | 'users' | 'general' | 'archive' | 'meta'>('api') // Settings sub-tabs
   const [contentSubTab, setContentSubTab] = useState<'actual' | 'archive'>('actual') // Content sub-tabs - MUST be here for hooks order
   const [trafficSubTab, setTrafficSubTab] = useState<'results' | 'campaigns'>('results')
+
+  // Company branding
+  const [companyName, setCompanyName] = useState('')
+  const [companyLogo, setCompanyLogo] = useState('')
+
+  // Fetch company branding on mount
+  useEffect(() => {
+    fetch('/api/settings/site')
+      .then(res => res.json())
+      .then(data => {
+        if (data.data?.companyName) setCompanyName(data.data.companyName)
+        if (data.data?.companyLogo) setCompanyLogo(data.data.companyLogo)
+      })
+      .catch(() => {})
+  }, [])
 
   const [workers, setWorkers] = useState(() => {
     if (typeof window === 'undefined') return []
@@ -609,11 +625,20 @@ const SmmHub = () => {
 
       {/* Top Nav */}
       <div style={{ background: 'white', borderBottom: '1px solid #e2e8f0', padding: '0 24px', display: 'flex', alignItems: 'center', gap: 0, height: 60, position: 'sticky', top: 0, zIndex: 100 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginRight: 32 }}>
-          <div style={{ width: 32, height: 32, borderRadius: 10, background: 'linear-gradient(135deg,#3b82f6,#6366f1)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <Activity size={18} color="white"/>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginRight: 32 }}>
+          {companyLogo ? (
+            <img src={companyLogo} alt="Company Logo" style={{ width: 36, height: 36, borderRadius: 8, objectFit: 'contain' }}/>
+          ) : (
+            <div style={{ width: 36, height: 36, borderRadius: 8, background: 'linear-gradient(135deg,#3b82f6,#6366f1)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <Activity size={20} color="white"/>
+            </div>
+          )}
+          <div style={{ display: 'flex', flexDirection: 'column' }}>
+            <span style={{ fontWeight: 900, fontSize: 15, lineHeight: 1.2, color: '#0f172a' }}>SMM Hub</span>
+            {companyName && (
+              <span style={{ fontWeight: 500, fontSize: 11, lineHeight: 1.2, color: '#64748b' }}>for {companyName}</span>
+            )}
           </div>
-          <span style={{ fontWeight: 900, fontSize: 17 }}>SMM Hub</span>
         </div>
 
         <div style={{ display: 'flex', gap: 2, flex: 1, overflowX: 'auto' }}>
@@ -2073,14 +2098,24 @@ const UserManagement = () => {
 // ─── General Settings Component ────────────────────────────────────────────────
 const GeneralSettings = () => {
   const [siteCurrency, setSiteCurrency] = useState('EUR')
+  const [companyName, setCompanyName] = useState('')
+  const [companyLogo, setCompanyLogo] = useState('')
+  const [logoPreview, setLogoPreview] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     fetch('/api/settings/site')
       .then(res => res.json())
       .then(data => {
-        if (data.settings?.siteCurrency) {
-          setSiteCurrency(data.settings.siteCurrency)
+        if (data.data?.siteCurrency) {
+          setSiteCurrency(data.data.siteCurrency)
+        }
+        if (data.data?.companyName) {
+          setCompanyName(data.data.companyName)
+        }
+        if (data.data?.companyLogo) {
+          setCompanyLogo(data.data.companyLogo)
+          setLogoPreview(data.data.companyLogo)
         }
         setLoading(false)
       })
@@ -2092,13 +2127,38 @@ const GeneralSettings = () => {
       const res = await fetch('/api/settings/site', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ siteCurrency }),
+        body: JSON.stringify({ siteCurrency, companyName, companyLogo: logoPreview }),
       })
-      if (res.ok) alert('Site currency updated')
-      else alert('Failed to update site currency')
+      if (res.ok) alert('Settings updated successfully')
+      else alert('Failed to update settings')
     } catch (err) {
-      alert('Failed to update site currency')
+      alert('Failed to update settings')
     }
+  }
+
+  const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    
+    // Check file size (max 500KB)
+    if (file.size > 500 * 1024) {
+      alert('Image must be less than 500KB')
+      return
+    }
+    
+    // Check file type
+    if (!file.type.startsWith('image/')) {
+      alert('Please upload an image file')
+      return
+    }
+    
+    const reader = new FileReader()
+    reader.onloadend = () => {
+      const result = reader.result as string
+      setLogoPreview(result)
+      setCompanyLogo(result)
+    }
+    reader.readAsDataURL(file)
   }
 
   if (loading) return <div style={{ padding: 40, textAlign: 'center', color: '#94a3b8' }}>Loading...</div>
@@ -2108,6 +2168,60 @@ const GeneralSettings = () => {
       <div>
         <h2 style={{ fontWeight: 900, fontSize: 20, margin: '0 0 6px' }}>General Settings</h2>
         <p style={{ color: '#64748b', fontSize: 13, margin: '0 0 20px' }}>Configure site-wide settings and preferences</p>
+      </div>
+
+      {/* Company Branding */}
+      <div style={{ background: 'white', borderRadius: 16, padding: '24px', border: '1px solid #e2e8f0', maxWidth: 600 }}>
+        <h3 style={{ fontWeight: 900, fontSize: 16, margin: '0 0 16px', display: 'flex', alignItems: 'center', gap: 8 }}>
+          <Building size={18} color="#3b82f6"/> Company Branding
+        </h3>
+        <p style={{ fontSize: 13, color: '#64748b', margin: '0 0 20px' }}>
+          Customize how your SMM Hub appears with your company name and logo.
+        </p>
+        
+        {/* Company Logo */}
+        <div style={{ marginBottom: 20 }}>
+          <label style={{ fontSize: 12, fontWeight: 700, color: '#64748b', display: 'block', marginBottom: 8 }}>Company Logo</label>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+            <div style={{ width: 80, height: 80, borderRadius: 12, background: '#f8fafc', border: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', flexShrink: 0 }}>
+              {logoPreview ? (
+                <img src={logoPreview} alt="Company Logo" style={{ width: '100%', height: '100%', objectFit: 'contain' }}/>
+              ) : (
+                <Building size={32} color="#cbd5e1"/>
+              )}
+            </div>
+            <label style={{ background: '#f1f5f9', borderRadius: 8, padding: '10px 16px', cursor: 'pointer', fontSize: 13, fontWeight: 600, color: '#475569', transition: 'background 0.2s' }}>
+              Upload Logo
+              <input type="file" accept="image/*" onChange={handleLogoUpload} style={{ display: 'none' }}/>
+            </label>
+            {logoPreview && (
+              <button 
+                onClick={() => { setLogoPreview(null); setCompanyLogo('') }}
+                style={{ background: '#fef2f2', border: 'none', borderRadius: 8, padding: '10px 16px', cursor: 'pointer', fontSize: 13, fontWeight: 600, color: '#ef4444', display: 'flex', alignItems: 'center', gap: 6 }}
+              >
+                <Trash2 size={14}/> Remove
+              </button>
+            )}
+          </div>
+          <p style={{ fontSize: 11, color: '#94a3b8', marginTop: 8 }}>
+            Max 500KB. PNG, JPG, SVG, WebP. Recommended: 200x200px square logo.
+          </p>
+        </div>
+
+        {/* Company Name */}
+        <div>
+          <label style={{ fontSize: 12, fontWeight: 700, color: '#64748b', display: 'block', marginBottom: 8 }}>Company Name</label>
+          <input
+            type="text"
+            value={companyName}
+            onChange={e => setCompanyName(e.target.value)}
+            placeholder="e.g. Acme Marketing"
+            style={{ width: '100%', padding: '10px 14px', border: '1px solid #e2e8f0', borderRadius: 8, fontSize: 14, boxSizing: 'border-box' }}
+          />
+          <p style={{ fontSize: 11, color: '#94a3b8', marginTop: 8 }}>
+            This will appear in the header as "SMM Hub for {companyName || 'Company Name'}"
+          </p>
+        </div>
       </div>
 
       {/* Site Currency */}
