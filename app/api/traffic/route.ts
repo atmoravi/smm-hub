@@ -61,3 +61,30 @@ export async function POST(req: NextRequest) {
     )
   }
 }
+
+// DELETE /api/traffic?id=... - Delete a traffic log entry
+export async function DELETE(req: NextRequest) {
+  try {
+    const { searchParams } = new URL(req.url)
+    const id = searchParams.get('id')
+
+    if (!id) {
+      return Response.json(
+        { error: { message: 'Missing id parameter', code: 'MISSING_ID' } },
+        { status: 400 }
+      )
+    }
+
+    await prisma.trafficLog.delete({
+      where: { id },
+    })
+
+    return Response.json({ data: { message: 'Deleted' } })
+  } catch (err) {
+    console.error('[traffic DELETE]', err)
+    return Response.json(
+      { error: { message: 'Internal server error', code: 'INTERNAL_ERROR' } },
+      { status: 500 }
+    )
+  }
+}

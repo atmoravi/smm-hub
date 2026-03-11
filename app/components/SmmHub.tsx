@@ -141,6 +141,7 @@ const SmmHub = () => {
 
   const [logs, setLogs] = useState(() => { if (typeof window === 'undefined') return []; const s = localStorage.getItem('smm-logs2'); return s ? JSON.parse(s) : [] })
   const [trafficLogs, setTrafficLogs] = useState<any[]>([])
+  const [metaStats, setMetaStats] = useState<any[]>([])
   const [salesLogs, setSalesLogs] = useState(() => { if (typeof window === 'undefined') return []; const s = localStorage.getItem('smm-sales2'); return s ? JSON.parse(s) : [] })
   const [endpoints, setEndpoints] = useState(() => { if (typeof window === 'undefined') return INITIAL_ENDPOINTS; const s = localStorage.getItem('smm-endpoints'); return s ? JSON.parse(s) : INITIAL_ENDPOINTS })
   const [settings, setSettings] = useState(() => { if (typeof window === 'undefined') return { targets: {} }; const s = localStorage.getItem('smm-settings2'); return s ? JSON.parse(s) : { targets: TASK_CATEGORIES.reduce((a,c)=>({...a,[c]:10}),{}) } })
@@ -151,7 +152,7 @@ const SmmHub = () => {
   const [category, setCategory] = useState(TASK_CATEGORIES[0])
   const [note, setNote] = useState('')
   const [incomeAmount, setIncomeAmount] = useState('')
-  const [trafficData, setTrafficData] = useState({ organicLeads: '', paidLeads: '', adSpend: '', campaignName: '' })
+  const [trafficData, setTrafficData] = useState({ organicLeads: '', paidLeads: '', campaignName: '' })
 
   // New worker form
   const [newWorker, setNewWorker] = useState({ name: '', rate: '25' })
@@ -196,13 +197,18 @@ const SmmHub = () => {
     }
   }, [currentWorker, authState])
 
-  // Fetch traffic logs for both admin and workers
+  // Fetch traffic logs and Meta stats for both admin and workers
   useEffect(() => {
     if (authState === 'app') {
-      fetch('/api/traffic')
-        .then(res => res.json())
-        .then(data => setTrafficLogs(data.data || []))
-        .catch(err => console.error('[traffic] Failed to load:', err))
+      Promise.all([
+        fetch('/api/traffic').then(res => res.json()),
+        fetch('/api/meta/stats').then(res => res.json()),
+      ])
+        .then(([traffic, meta]) => {
+          setTrafficLogs(traffic.data || [])
+          setMetaStats(meta.data || [])
+        })
+        .catch(err => console.error('[traffic/meta] Failed to load:', err))
     }
   }, [authState])
 
@@ -353,10 +359,10 @@ const SmmHub = () => {
           campaignName: trafficData.campaignName,
           organicLeads: parseInt(trafficData.organicLeads) || 0,
           paidLeads: parseInt(trafficData.paidLeads) || 0,
-          adSpend: parseFloat(trafficData.adSpend) || 0,
+          adSpend: 0,
         }),
       })
-      setTrafficData({ organicLeads: '', paidLeads: '', adSpend: '', campaignName: '' })
+      setTrafficData({ organicLeads: '', paidLeads: '', campaignName: '' })
       const res = await fetch('/api/traffic')
       const data = await res.json()
       setTrafficLogs(data.data || [])
@@ -504,6 +510,17 @@ const SmmHub = () => {
       overallOrganic, overallPaid, overallAdSpend,
     }
   }, [logs, trafficLogs, salesLogs, workersList])
+
+  // Compute Meta ad spend by date
+  const metaSpendByDate = useMemo(() => {
+    const map: Record<string, number> = {}
+    for (const campaign of metaStats) {
+      for (const row of campaign.summary || []) {
+        map[row.date] = (map[row.date] || 0) + row.spend
+      }
+    }
+    return map
+  }, [metaStats])
 
   const formatTime = (mins) => `${Math.floor(mins/60)}h ${mins%60}m`
   const fmt = (n) => n?.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 }) ?? '—'
@@ -1068,7 +1085,6 @@ const SmmHub = () => {
                   {[
                     { key: 'organicLeads', label: 'Organic Leads', color: '#10b981' },
                     { key: 'paidLeads', label: 'Paid Leads', color: '#3b82f6' },
-                    { key: 'adSpend', label: 'Ad Spend ($)', color: '#f59e0b' },
                   ].map(f => (
                     <div key={f.key} style={{ gridColumn: f.key === 'adSpend' ? 'span 2' : 'span 1' }}>
                       <label style={{ fontSize: 10, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', display: 'block', marginBottom: 4 }}>{f.label}</label>
@@ -1105,11 +1121,14 @@ const SmmHub = () => {
 
               {/* Log table */}
               <div style={{ background: 'white', borderRadius: 16, border: '1px solid #e2e8f0', overflow: 'hidden' }}>
-                <div style={{ padding: '14px 20px', borderBottom: '1px solid #f1f5f9', fontWeight: 800, fontSize: 13 }}>Campaign History</div>
+                <div style={{ padding: '14px 20px', borderBottom: '1px solid #f1f5f9', fontWeight: 800, fontSize: 13, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  Campaign History
+                  <button onClick={async () => { const [traffic, meta] = await Promise.all([fetch('/api/traffic').then(r => r.json()), fetch('/api/meta/stats').then(r => r.json())]); setTrafficLogs(traffic.data || []); setMetaStats(meta.data || []) }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#64748b', padding: '4px 8px', display: 'flex', alignItems: 'center', gap: 4, fontSize: 12, fontWeight: 600 }}><RefreshCw size={14} /> Refresh</button>
+                </div>
                 <div style={{ overflowY: 'auto', maxHeight: 280 }}>
                   <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                     <thead><tr style={{ background: '#f8fafc' }}>
-                      {['Date','Campaign','Organic','Paid','Ad Spend',''].map(h => <th key={h} style={{ padding: '9px 16px', textAlign: 'left', fontSize: 11, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase' }}>{h}</th>)}
+                      {['Date','Campaign','Organic','Paid','Meta Spend',''].map(h => <th key={h} style={{ padding: '9px 16px', textAlign: 'left', fontSize: 11, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase' }}>{h}</th>)}
                     </tr></thead>
                     <tbody>
                       {trafficLogs.map(t => (
@@ -1118,8 +1137,8 @@ const SmmHub = () => {
                           <td style={{ padding: '12px 16px', fontSize: 13, fontWeight: 600 }}>{t.campaignName || '—'}</td>
                           <td style={{ padding: '12px 16px', fontSize: 13, color: '#10b981', fontWeight: 700 }}>{t.organicLeads}</td>
                           <td style={{ padding: '12px 16px', fontSize: 13, color: '#3b82f6', fontWeight: 700 }}>{t.paidLeads}</td>
-                          <td style={{ padding: '12px 16px', fontSize: 13, color: '#f59e0b', fontWeight: 700 }}>{fmtDollar(t.adSpend)}</td>
-                          <td style={{ padding: '12px 16px' }}><button onClick={() => setTrafficLogs(p=>p.filter(x=>x.id!==t.id))} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#cbd5e1' }}><Trash2 size={12}/></button></td>
+                          <td style={{ padding: '12px 16px', fontSize: 13, color: '#f59e0b', fontWeight: 700 }}>{fmtDollar(metaSpendByDate[t.date] || 0)}</td>
+                          <td style={{ padding: '12px 16px' }}><button onClick={async () => { await fetch(`/api/traffic?id=${t.id}`, { method: 'DELETE' }); setTrafficLogs(p=>p.filter(x=>x.id!==t.id)) }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#cbd5e1' }}><Trash2 size={12}/></button></td>
                         </tr>
                       ))}
                     </tbody>
@@ -2304,6 +2323,8 @@ const MetaAdsSettings = ({ onLog }: { onLog?: (level: LogEntry['level'], msg: st
   const [showForm, setShowForm] = useState(false)
   const [form, setForm] = useState({ label: '', metaCampaignNames: '', adsetNames: '', active: true })
   const [copiedId, setCopiedId] = useState<string | null>(null)
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [editForm, setEditForm] = useState({ label: '', metaCampaignNames: '', adsetNames: '', active: true })
 
   useEffect(() => {
     fetch('/api/settings/site').then(r => r.json()).then(d => {
@@ -2347,6 +2368,36 @@ const MetaAdsSettings = ({ onLog }: { onLog?: (level: LogEntry['level'], msg: st
   const deleteCampaign = async (id: string) => {
     await fetch(`/api/meta/settings/${id}`, { method: 'DELETE' })
     fetchCampaigns()
+  }
+
+  const startEdit = (campaign: any) => {
+    setEditingId(campaign.id)
+    setEditForm({
+      label: campaign.label,
+      metaCampaignNames: (campaign.metaCampaignNames as string[]).join(', '),
+      adsetNames: (campaign.adsetNames as string[]).join('\n'),
+      active: campaign.active,
+    })
+  }
+
+  const cancelEdit = () => {
+    setEditingId(null)
+    setEditForm({ label: '', metaCampaignNames: '', adsetNames: '', active: true })
+  }
+
+  const saveEdit = async () => {
+    if (!editingId) return
+    const payload = {
+      label: editForm.label.trim(),
+      metaCampaignNames: editForm.metaCampaignNames.split(',').map(s => s.trim()).filter(Boolean),
+      adsetNames: editForm.adsetNames.split('\n').map(s => s.trim()).filter(Boolean),
+      active: editForm.active,
+    }
+    const res = await fetch(`/api/meta/settings/${editingId}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
+    if (res.ok) {
+      cancelEdit()
+      fetchCampaigns()
+    }
   }
 
   const copySecret = (secret: string, id: string) => {
@@ -2427,27 +2478,55 @@ const MetaAdsSettings = ({ onLog }: { onLog?: (level: LogEntry['level'], msg: st
         ) : (
           campaigns.map(c => (
             <div key={c.id} style={{ background: 'white', borderRadius: 16, border: '1px solid #e2e8f0', padding: 20 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                <div>
-                  <div style={{ fontWeight: 800, fontSize: 15, marginBottom: 4 }}>{c.label}</div>
-                  <div style={{ fontSize: 12, color: '#64748b', marginBottom: 4 }}>
-                    <span style={{ fontWeight: 700 }}>Campaigns:</span> {(c.metaCampaignNames as string[]).join(', ')}
+              {editingId === c.id ? (
+                // Edit form
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                  <div>
+                    <label style={{ fontSize: 12, fontWeight: 700, color: '#64748b', display: 'block', marginBottom: 4 }}>Label</label>
+                    <input value={editForm.label} onChange={e => setEditForm({ ...editForm, label: e.target.value })} placeholder="Offer 2 Spring" style={{ width: '100%', padding: '10px 14px', border: '1px solid #e2e8f0', borderRadius: 8, fontSize: 13, boxSizing: 'border-box' }}/>
                   </div>
-                  {(c.adsetNames as string[]).length > 0 && (
-                    <div style={{ fontSize: 12, color: '#64748b' }}>
-                      <span style={{ fontWeight: 700 }}>Ad Sets:</span> {(c.adsetNames as string[]).join(', ')}
-                    </div>
-                  )}
+                  <div>
+                    <label style={{ fontSize: 12, fontWeight: 700, color: '#64748b', display: 'block', marginBottom: 4 }}>Meta Campaign Names <span style={{ fontWeight: 400, color: '#94a3b8' }}>(comma-separated)</span></label>
+                    <input value={editForm.metaCampaignNames} onChange={e => setEditForm({ ...editForm, metaCampaignNames: e.target.value })} placeholder="Campaign A, Campaign B" style={{ width: '100%', padding: '10px 14px', border: '1px solid #e2e8f0', borderRadius: 8, fontSize: 13, boxSizing: 'border-box' }}/>
+                  </div>
+                  <div>
+                    <label style={{ fontSize: 12, fontWeight: 700, color: '#64748b', display: 'block', marginBottom: 4 }}>Ad Set Names <span style={{ fontWeight: 400, color: '#94a3b8' }}>(one per line)</span></label>
+                    <textarea value={editForm.adsetNames} onChange={e => setEditForm({ ...editForm, adsetNames: e.target.value })} rows={4} placeholder={"AdSet 1\nAdSet 2"} style={{ width: '100%', padding: '10px 14px', border: '1px solid #e2e8f0', borderRadius: 8, fontSize: 13, boxSizing: 'border-box', resize: 'vertical' }}/>
+                  </div>
+                  <div style={{ display: 'flex', gap: 10 }}>
+                    <button onClick={cancelEdit} style={{ flex: 1, background: '#f1f5f9', border: 'none', borderRadius: 8, padding: '10px', color: '#64748b', fontWeight: 600, cursor: 'pointer', fontSize: 13 }}>Cancel</button>
+                    <button onClick={saveEdit} style={{ flex: 2, background: 'linear-gradient(135deg,#3b82f6,#6366f1)', border: 'none', borderRadius: 8, padding: '10px', color: 'white', fontWeight: 700, cursor: 'pointer', fontSize: 13 }}>Save Changes</button>
+                  </div>
                 </div>
-                <button onClick={() => deleteCampaign(c.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#cbd5e1' }}><Trash2 size={14}/></button>
-              </div>
-              <div style={{ marginTop: 12, display: 'flex', alignItems: 'center', gap: 8 }}>
-                <span style={{ fontSize: 11, fontWeight: 700, color: '#94a3b8' }}>WEBHOOK SECRET</span>
-                <code style={{ fontSize: 11, background: '#f8fafc', padding: '4px 8px', borderRadius: 6, color: '#475569', letterSpacing: 1 }}>{c.webhookSecret.slice(0, 8)}•••</code>
-                <button onClick={() => copySecret(c.webhookSecret, c.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: copiedId === c.id ? '#10b981' : '#94a3b8', display: 'flex', alignItems: 'center', gap: 4, fontSize: 12 }}>
-                  {copiedId === c.id ? <><Check size={12}/> Copied</> : <><Copy size={12}/> Copy</>}
-                </button>
-              </div>
+              ) : (
+                // View mode
+                <>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                    <div>
+                      <div style={{ fontWeight: 800, fontSize: 15, marginBottom: 4 }}>{c.label}</div>
+                      <div style={{ fontSize: 12, color: '#64748b', marginBottom: 4 }}>
+                        <span style={{ fontWeight: 700 }}>Campaigns:</span> {(c.metaCampaignNames as string[]).join(', ')}
+                      </div>
+                      {(c.adsetNames as string[]).length > 0 && (
+                        <div style={{ fontSize: 12, color: '#64748b' }}>
+                          <span style={{ fontWeight: 700 }}>Ad Sets:</span> {(c.adsetNames as string[]).join(', ')}
+                        </div>
+                      )}
+                    </div>
+                    <div style={{ display: 'flex', gap: 4 }}>
+                      <button onClick={() => startEdit(c)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#cbd5e1', padding: '4px' }}><Layers size={14}/></button>
+                      <button onClick={() => deleteCampaign(c.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#cbd5e1', padding: '4px' }}><Trash2 size={14}/></button>
+                    </div>
+                  </div>
+                  <div style={{ marginTop: 12, display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span style={{ fontSize: 11, fontWeight: 700, color: '#94a3b8' }}>WEBHOOK SECRET</span>
+                    <code style={{ fontSize: 11, background: '#f8fafc', padding: '4px 8px', borderRadius: 6, color: '#475569', letterSpacing: 1 }}>{c.webhookSecret.slice(0, 8)}•••</code>
+                    <button onClick={() => copySecret(c.webhookSecret, c.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: copiedId === c.id ? '#10b981' : '#94a3b8', display: 'flex', alignItems: 'center', gap: 4, fontSize: 12 }}>
+                      {copiedId === c.id ? <><Check size={12}/> Copied</> : <><Copy size={12}/> Copy</>}
+                    </button>
+                  </div>
+                </>
+              )}
             </div>
           ))
         )}
