@@ -505,9 +505,10 @@ const PostsTab: React.FC<PostsTabProps> = (props) => {
   const handleSave = async (post: Post) => {
     setSaving(true)
     try {
-      const url = `/api/posts${post.id && !post.id.startsWith('-') ? `/${post.id}` : ''}`
-      const method = post.id && !post.id.startsWith('-') ? 'PUT' : 'POST'
-      
+      const isExisting = post.createdAt // Database-saved posts have createdAt
+      const url = isExisting ? `/api/posts/${post.id}` : '/api/posts'
+      const method = isExisting ? 'PUT' : 'POST'
+
       const body: Record<string, unknown> = {
         title: post.title || 'Untitled',
         platform: post.platform,
