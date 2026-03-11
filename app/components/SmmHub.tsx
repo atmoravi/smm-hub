@@ -613,7 +613,7 @@ const SmmHub = () => {
   // ── Main App ─────────────────────────────────────────────────────────────────
   const isAdmin = currentRole === 'admin'
   const TABS = isAdmin
-    ? ['dashboard', 'content', 'traffic', 'settings', 'history']
+    ? [...(currentWorker ? ['effort'] : []), 'dashboard', 'content', 'traffic', 'settings', 'history']
     : ['effort', 'content', 'traffic', 'history']
 
   const tabLabels = { dashboard: 'Dashboard', content: 'Content', traffic: 'Traffic', workers: 'Workers', settings: 'Settings', history: 'History', effort: 'Log Effort' }
@@ -993,8 +993,8 @@ const SmmHub = () => {
           </div>
         )}
 
-        {/* ── EFFORT LOG (worker) ── */}
-        {activeTab === 'effort' && !isAdmin && (
+        {/* ── EFFORT LOG (worker and logged-in admins) ── */}
+        {activeTab === 'effort' && !!currentWorker && (
           <div style={{ display: 'grid', gridTemplateColumns: '320px 1fr', gap: 20 }}>
             <div style={{ background: 'white', borderRadius: 16, padding: '24px', border: '1px solid #e2e8f0' }}>
               <h2 style={{ fontWeight: 900, fontSize: 16, color: '#3b82f6', margin: '0 0 18px', display: 'flex', alignItems: 'center', gap: 8 }}><Plus size={18}/> Log Effort</h2>

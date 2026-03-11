@@ -1,14 +1,13 @@
 // app/api/auth/workers/route.ts
 import { prisma } from '@/lib/prisma'
 
-// GET /api/auth/workers - List active workers (for login dropdown)
-// Excludes admin users - they must use PIN login
+// GET /api/auth/workers - List active team members (for login dropdown)
+// Includes all active users (workers and admins who want to log in via username/password)
 export async function GET() {
   try {
     const workers = await prisma.user.findMany({
       where: {
         active: true,
-        role: 'user' // Only non-admin users
       },
       select: {
         id: true,
