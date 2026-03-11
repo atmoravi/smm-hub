@@ -92,12 +92,17 @@ export async function POST() {
 
         const campaignTotal = matchedCampaigns.reduce((sum, r) => sum + parseFloat(r.spend ?? '0'), 0)
 
-        await prisma.metaSpendLog.upsert({
-          where: { date_metaSettingsId_adsetName: { date, metaSettingsId: config.id, adsetName: '' } },
-          update: { spend: campaignTotal, syncedAt: now },
-          create: { date, metaSettingsId: config.id, adsetName: '', spend: campaignTotal },
-        })
-        totalUpserts++
+        try {
+          const result = await prisma.metaSpendLog.upsert({
+            where: { date_metaSettingsId_adsetName: { date, metaSettingsId: config.id, adsetName: '' } },
+            update: { spend: campaignTotal, syncedAt: now },
+            create: { date, metaSettingsId: config.id, adsetName: '', spend: campaignTotal },
+          })
+          logs.push(`    Campaign upserted: ${result.id} spend=$${result.spend} date=${result.date.toISOString()}`)
+          totalUpserts++
+        } catch (err) {
+          logs.push(`    Campaign upsert ERROR: ${String(err)}`)
+        }
 
         // Per-adset spend
         for (const adsetName of trackedAdsets) {
@@ -106,12 +111,17 @@ export async function POST() {
 
           const adsetSpend = matchedAdsets.reduce((sum, r) => sum + parseFloat(r.spend ?? '0'), 0)
 
-          await prisma.metaSpendLog.upsert({
-            where: { date_metaSettingsId_adsetName: { date, metaSettingsId: config.id, adsetName } },
-            update: { spend: adsetSpend, syncedAt: now },
-            create: { date, metaSettingsId: config.id, adsetName, spend: adsetSpend },
-          })
-          totalUpserts++
+          try {
+            const result = await prisma.metaSpendLog.upsert({
+              where: { date_metaSettingsId_adsetName: { date, metaSettingsId: config.id, adsetName } },
+              update: { spend: adsetSpend, syncedAt: now },
+              create: { date, metaSettingsId: config.id, adsetName, spend: adsetSpend },
+            })
+            logs.push(`      Adset upserted: ${result.id} spend=$${result.spend}`)
+            totalUpserts++
+          } catch (err) {
+            logs.push(`      Adset upsert ERROR: ${String(err)}`)
+          }
         }
       }
     }
