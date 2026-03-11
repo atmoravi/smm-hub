@@ -54,8 +54,10 @@ export async function POST(req: NextRequest) {
     const parsed = PostSchema.safeParse(body)
 
     if (!parsed.success) {
+      const fieldErrors = parsed.error.issues.map(i => `${i.path.join('.')}: ${i.message}`).join('; ')
+      console.error('[posts POST validation failed]', fieldErrors, 'Body:', JSON.stringify(body))
       return Response.json(
-        { error: { message: 'Invalid input', code: 'INVALID_INPUT', issues: parsed.error.issues } },
+        { error: { message: 'Validation failed: ' + fieldErrors, code: 'VALIDATION_ERROR' } },
         { status: 422 }
       )
     }
