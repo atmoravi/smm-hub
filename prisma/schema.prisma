@@ -113,3 +113,27 @@ model MetaDailyStats {
 
   @@unique([date, metaSettingsId, adsetName, adId])
 }
+
+model Post {
+  id            String   @id @default(cuid())
+  title         String
+  platform      String   // Instagram, TikTok, LinkedIn, Facebook, X/Twitter, YouTube
+  contentType   String   // Reel, Carousel, Static Post, Story, Video, Article, Thread
+  status        String   // Draft, Scheduled, Published, Results In
+  scheduledDate DateTime
+  publishedDate DateTime?
+  caption       String   @default("")
+  tags          Json     @default("[]") // string[]
+  assignedTo    String   @default("") // userId (empty = unassigned)
+  minutesSpent  Int      @default(0)
+  impressions   Int      @default(0)
+  organicLeads  Int      @default(0)
+  notes         String   @default("")
+  createdBy     String   // userId
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([status])
+  @@index([platform])
+  @@index([scheduledDate])
+}

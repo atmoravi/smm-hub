@@ -200,17 +200,13 @@ const SmmHub = () => {
   // ── Auth flow ────────────────────────────────────────────────────────────────
   const handleRoleSelect = (role) => {
     if (role === 'admin') { setCurrentRole('admin'); setAuthState('pin') }
-    else { 
+    else {
       setCurrentRole('worker')
-      // Fetch workers from database
+      // Fetch workers from database (admin users excluded - they must use PIN login)
       setWorkersLoading(true)
       fetch('/api/auth/workers')
-        .then(res => {
-          console.log('[worker-select] Response status:', res.status)
-          return res.json()
-        })
+        .then(res => res.json())
         .then(data => {
-          console.log('[worker-select] Loaded workers:', data.workers)
           setWorkersList(data.workers || [])
           setWorkersLoading(false)
           setAuthState('worker-select')
@@ -245,7 +241,12 @@ const SmmHub = () => {
       })
       const data = await res.json()
       if (res.ok && data.data?.user) {
-        setCurrentWorker(data.data.user)
+        const user = data.data.user
+        // If user has admin role, switch to admin mode
+        if (user.role === 'admin') {
+          setCurrentRole('admin')
+        }
+        setCurrentWorker(user)
         setAuthState('app')
         setLoginPassword('')
         setLoginError('')
@@ -963,7 +964,7 @@ const SmmHub = () => {
                 </button>
               )}
             </div>
-            <PostsTab workers={workersList || []} isAdmin={isAdmin} archiveMode={contentSubTab} />
+            <PostsTab workers={workersList || []} isAdmin={isAdmin} archiveMode={contentSubTab} userId={currentWorker?.id} />
           </div>
         )}
 

@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useMemo } from 'react'
+import React, { useState, useMemo, useEffect, useCallback } from 'react'
 import {
   Plus, Calendar, Clock, Check, X, Trash2, Filter, ChevronDown,
   ChevronRight, Edit3, BarChart2, Target, FileText, Tag, ArchiveRestore
@@ -61,6 +61,9 @@ interface Post {
   impressions: number
   organicLeads: number
   notes: string
+  createdBy?: string
+  createdAt?: string
+  updatedAt?: string
 }
 
 interface Worker {
@@ -85,7 +88,7 @@ const blankPost = (): Post => ({
   notes: '',
 })
 
-const PostCard: React.FC<{ post: Post; onClick: (post: Post) => void; workers: Worker[] }> = ({ post, onClick, workers }) => {
+const PostCard: React.FC<{ post: Post; onClick: (post: Post) => void; onDelete: (post: Post) => void; workers: Worker[] }> = ({ post, onClick, onDelete, workers }) => {
   const sc = STATUS_COLORS[post.status]
   const pc = PLATFORM_COLORS[post.platform]
   const hasResults = post.status === 'Results In'
@@ -108,6 +111,30 @@ const PostCard: React.FC<{ post: Post; onClick: (post: Post) => void; workers: W
       onMouseLeave={e => { e.currentTarget.style.boxShadow = 'none'; e.currentTarget.style.transform = 'none'; }}
     >
       <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 3, background: pc, borderRadius: '14px 14px 0 0' }}/>
+      <button
+        onClick={() => onDelete(post)}
+        style={{
+          position: 'absolute',
+          top: 10,
+          right: 10,
+          width: 28,
+          height: 28,
+          borderRadius: 8,
+          border: 'none',
+          background: '#fef2f2',
+          cursor: 'pointer',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          color: '#ef4444',
+          opacity: 0,
+          transition: 'opacity 0.15s',
+        }}
+        onMouseEnter={e => e.currentTarget.style.background = '#fee2e2'}
+        onMouseLeave={e => e.currentTarget.style.background = '#fef2f2'}
+      >
+        <Trash2 size={14}/>
+      </button>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 10, marginTop: 4 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
           <span style={{ fontSize: 14 }}>{PLATFORM_ICONS[post.platform]}</span>
@@ -423,17 +450,17 @@ interface PostsTabProps {
   workers: Worker[]
   isAdmin: boolean
   archiveMode: 'actual' | 'archive'
+  userId?: string // Current logged-in user's ID
 }
 
 const PostsTab: React.FC<PostsTabProps> = (props) => {
   const workers = props.workers || []
   const isAdmin = props.isAdmin || false
   const archiveMode = props.archiveMode || 'actual'
-  const [posts, setPosts] = useState<Post[]>(() => {
-    if (typeof window === 'undefined') return SAMPLE_POSTS
-    const saved = localStorage.getItem('smm-posts')
-    return saved ? JSON.parse(saved) : SAMPLE_POSTS
-  })
+  const userId = props.userId || ''
+  const [posts, setPosts] = useState<Post[]>([])
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
   const [modalPost, setModalPost] = useState<Post | null>(null)
   const [viewMode, setViewMode] = useState<'board' | 'list'>('board')
   const [filterPlatform, setFilterPlatform] = useState('All')
@@ -441,7 +468,31 @@ const PostsTab: React.FC<PostsTabProps> = (props) => {
   const [showFilters, setShowFilters] = useState(false)
   const [expandedCols, setExpandedCols] = useState<Record<string, boolean>>({})
 
-  const savePosts = (updated: Post[]) => {
+  // Load posts from API on mount
+  useEffect(() => {
+    async function loadPosts() {
+      try {
+        const res = await fetch('/api/posts')
+        const json = await res.json()
+        if (json.data) {
+          setPosts(json.data.map((p: any) => ({
+            ...p,
+            scheduledDate: p.scheduledDate ? new Date(p.scheduledDate).toISOString().split('T')[0] : '',
+            publishedDate: p.publishedDate ? new Date(p.publishedDate).toISOString().split('T')[0] : '',
+            tags: Array.isArray(p.tags) ? p.tags : [],
+          })))
+        }
+      } catch (err) {
+        console.error('Failed to load posts:', err)
+      } finally {
+        setLoading(false)
+      }
+    }
+    loadPosts()
+  }, [])
+
+  // Save to localStorage as fallback (for offline/dev without DB)
+  const savePostsLocal = (updated: Post[]) => {
     setPosts(updated)
     if (typeof window !== 'undefined') {
       localStorage.setItem('smm-posts', JSON.stringify(updated))
@@ -451,16 +502,92 @@ const PostsTab: React.FC<PostsTabProps> = (props) => {
   const openNew = () => setModalPost(blankPost())
   const openEdit = (post: Post) => setModalPost({ ...post })
 
-  const handleSave = (post: Post) => {
-    const exists = posts.find(p => p.id === post.id)
-    if (exists) savePosts(posts.map(p => p.id === post.id ? post : p))
-    else savePosts([post, ...posts])
-    setModalPost(null)
+  const handleSave = async (post: Post) => {
+    setSaving(true)
+    try {
+      const url = `/api/posts${post.id && !post.id.startsWith('-') ? `/${post.id}` : ''}`
+      const method = post.id && !post.id.startsWith('-') ? 'PUT' : 'POST'
+      
+      const body: Record<string, unknown> = {
+        title: post.title || 'Untitled',
+        platform: post.platform,
+        contentType: post.contentType,
+        status: post.status,
+        scheduledDate: post.scheduledDate,
+        publishedDate: post.publishedDate || undefined,
+        caption: post.caption,
+        tags: post.tags,
+        assignedTo: post.assignedTo,
+        minutesSpent: post.minutesSpent,
+        impressions: post.impressions,
+        organicLeads: post.organicLeads,
+        notes: post.notes,
+        createdBy: post.createdBy || userId,
+      }
+
+      const res = await fetch(url, {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      })
+
+      const json = await res.json()
+      
+      if (!res.ok) {
+        throw new Error(json.error?.message || 'Failed to save post')
+      }
+
+      const savedPost = json.data
+      const normalizedPost = {
+        ...savedPost,
+        scheduledDate: savedPost.scheduledDate ? new Date(savedPost.scheduledDate).toISOString().split('T')[0] : '',
+        publishedDate: savedPost.publishedDate ? new Date(savedPost.publishedDate).toISOString().split('T')[0] : '',
+        tags: Array.isArray(savedPost.tags) ? savedPost.tags : [],
+      }
+
+      // Update local state
+      const exists = posts.find(p => p.id === savedPost.id)
+      if (exists) {
+        setPosts(posts.map(p => p.id === savedPost.id ? normalizedPost : p))
+      } else {
+        setPosts([normalizedPost, ...posts])
+      }
+      setModalPost(null)
+    } catch (err) {
+      console.error('Failed to save post:', err)
+      alert('Failed to save post. Falling back to local storage.')
+      // Fallback to localStorage
+      const exists = posts.find(p => p.id === post.id)
+      if (exists) {
+        savePostsLocal(posts.map(p => p.id === post.id ? post : p))
+      } else {
+        savePostsLocal([post, ...posts])
+      }
+      setModalPost(null)
+    } finally {
+      setSaving(false)
+    }
   }
 
-  const handleDelete = (id: string) => {
-    savePosts(posts.filter(p => p.id !== id))
-    setModalPost(null)
+  const handleDelete = async (id: string) => {
+    const post = posts.find(p => p.id === id)
+    if (!window.confirm(`Delete "${post?.title || 'Untitled post'}"? This cannot be undone.`)) return
+    
+    try {
+      const res = await fetch(`/api/posts/${id}`, { method: 'DELETE' })
+      if (!res.ok) {
+        const json = await res.json()
+        throw new Error(json.error?.message || 'Failed to delete post')
+      }
+      setPosts(posts.filter(p => p.id !== id))
+      if (modalPost?.id === id) setModalPost(null)
+    } catch (err) {
+      console.error('Failed to delete post:', err)
+      alert('Failed to delete post. Removing from local view only.')
+      // Fallback: remove from local state only
+      setPosts(posts.filter(p => p.id !== id))
+      if (modalPost?.id === id) setModalPost(null)
+    }
   }
 
   const filtered = useMemo(() => {
@@ -514,6 +641,37 @@ const PostsTab: React.FC<PostsTabProps> = (props) => {
     }
   }, [posts])
 
+  // Archive stats: time-based breakdown of archived posts
+  const archiveStats = useMemo(() => {
+    // Get all Results In posts, sort by date, take those beyond 8 most recent
+    const resultsInPosts = posts.filter(p => p.status === 'Results In')
+    const sorted = resultsInPosts.sort((a, b) => 
+      new Date(b.publishedDate || b.scheduledDate).getTime() - new Date(a.publishedDate || a.scheduledDate).getTime()
+    )
+    const archived = sorted.slice(8) // Beyond 8 most recent = archived
+    
+    const now = new Date()
+    const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000)
+    const monthAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000)
+    const yearStart = new Date(now.getFullYear(), 0, 1)
+    
+    return {
+      week: archived.filter(p => {
+        const d = new Date((p.publishedDate || p.scheduledDate) + 'T12:00:00')
+        return d >= weekAgo
+      }).length,
+      month: archived.filter(p => {
+        const d = new Date((p.publishedDate || p.scheduledDate) + 'T12:00:00')
+        return d >= monthAgo
+      }).length,
+      year: archived.filter(p => {
+        const d = new Date((p.publishedDate || p.scheduledDate) + 'T12:00:00')
+        return d >= yearStart
+      }).length,
+      allTime: archived.length,
+    }
+  }, [posts])
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
       {/* Archive banner */}
@@ -532,25 +690,44 @@ const PostsTab: React.FC<PostsTabProps> = (props) => {
         </div>
       )}
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 12 }}>
-        {[
-          { label: 'Total Posts', value: stats.totalPosts, color: '#0f172a' },
-          { label: 'With Results', value: stats.published, color: '#16a34a' },
-          { label: 'Total Impressions', value: stats.totalImpressions.toLocaleString(), color: '#3b82f6' },
-          { label: 'Organic Leads', value: stats.totalLeads, color: '#10b981' },
-          { label: 'Avg CVR', value: stats.avgCVR === '-' ? '-' : stats.avgCVR + '%', color: '#6366f1' },
-        ].map(s => (
-          <div key={s.label} style={{ background: 'white', borderRadius: 14, padding: '16px 18px', border: '1px solid #e2e8f0' }}>
-            <p style={{ fontSize: 11, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 0.8, margin: '0 0 6px' }}>{s.label}</p>
-            <p style={{ fontSize: 22, fontWeight: 900, color: s.color, margin: 0, fontVariantNumeric: 'tabular-nums' }}>{s.value}</p>
-          </div>
-        ))}
-      </div>
+      {/* Archive-specific stats: time-based breakdown */}
+      {archiveMode === 'archive' ? (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12 }}>
+          {[
+            { label: 'This Week', value: archiveStats.week, color: '#3b82f6' },
+            { label: 'This Month', value: archiveStats.month, color: '#10b981' },
+            { label: 'This Year', value: archiveStats.year, color: '#f59e0b' },
+            { label: 'All Time', value: archiveStats.allTime, color: '#6366f1' },
+          ].map(s => (
+            <div key={s.label} style={{ background: 'white', borderRadius: 14, padding: '16px 18px', border: '1px solid #e2e8f0' }}>
+              <p style={{ fontSize: 11, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 0.8, margin: '0 0 6px' }}>{s.label}</p>
+              <p style={{ fontSize: 22, fontWeight: 900, color: s.color, margin: 0, fontVariantNumeric: 'tabular-nums' }}>{s.value}</p>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 12 }}>
+          {[
+            { label: 'Total Posts', value: stats.totalPosts, color: '#0f172a' },
+            { label: 'With Results', value: stats.published, color: '#16a34a' },
+            { label: 'Total Impressions', value: stats.totalImpressions.toLocaleString(), color: '#3b82f6' },
+            { label: 'Organic Leads', value: stats.totalLeads, color: '#10b981' },
+            { label: 'Avg CVR', value: stats.avgCVR === '-' ? '-' : stats.avgCVR + '%', color: '#6366f1' },
+          ].map(s => (
+            <div key={s.label} style={{ background: 'white', borderRadius: 14, padding: '16px 18px', border: '1px solid #e2e8f0' }}>
+              <p style={{ fontSize: 11, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 0.8, margin: '0 0 6px' }}>{s.label}</p>
+              <p style={{ fontSize: 22, fontWeight: 900, color: s.color, margin: 0, fontVariantNumeric: 'tabular-nums' }}>{s.value}</p>
+            </div>
+          ))}
+        </div>
+      )}
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-        <button onClick={openNew} style={{ background: '#0f172a', border: 'none', borderRadius: 10, padding: '10px 18px', color: 'white', fontWeight: 700, fontSize: 13, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}>
-          <Plus size={15}/> New Post
-        </button>
+        {archiveMode !== 'archive' && (
+          <button onClick={openNew} style={{ background: '#0f172a', border: 'none', borderRadius: 10, padding: '10px 18px', color: 'white', fontWeight: 700, fontSize: 13, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}>
+            <Plus size={15}/> New Post
+          </button>
+        )}
         <div style={{ display: 'flex', background: 'white', border: '1px solid #e2e8f0', borderRadius: 10, overflow: 'hidden' }}>
           {(['board', 'list'] as const).map(mode => (
             <button key={mode} onClick={() => setViewMode(mode)} style={{ padding: '9px 14px', border: 'none', background: viewMode === mode ? '#0f172a' : 'transparent', color: viewMode === mode ? 'white' : '#64748b', fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>{mode === 'board' ? 'Board' : 'List'}</button>
@@ -594,7 +771,7 @@ const PostsTab: React.FC<PostsTabProps> = (props) => {
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                     {visible.map(post => (
-                      <PostCard key={post.id} post={post} onClick={openEdit} workers={workers}/>
+                      <PostCard key={post.id} post={post} onClick={openEdit} onDelete={(post) => handleDelete(post.id)} workers={workers}/>
                     ))}
                     {col.length === 0 && (
                       <div style={{ border: '2px dashed #e2e8f0', borderRadius: 14, padding: '24px 16px', textAlign: 'center' }}>
