@@ -440,7 +440,38 @@ const SmmHub = () => {
       return acc + (log.minutes / 60) * rate
     }, 0)
 
-    const totalAdSpend = mTraffic.reduce((a, c) => a + c.adSpend, 0)
+    // Ad Spend from MetaSpendLog (auto-synced from Meta API)
+    const totalAdSpend = metaStats.reduce((sum, campaign) => {
+      return sum + campaign.summary
+        .filter(s => {
+          const d = new Date(s.date)
+          return d >= startOfMonth
+        })
+        .reduce((s2, row) => s2 + row.spend, 0)
+    }, 0)
+
+    const todayAdSpend = metaStats.reduce((sum, campaign) => {
+      return sum + campaign.summary
+        .filter(s => {
+          const d = new Date(s.date)
+          return d >= today
+        })
+        .reduce((s2, row) => s2 + row.spend, 0)
+    }, 0)
+
+    const weekAdSpend = metaStats.reduce((sum, campaign) => {
+      return sum + campaign.summary
+        .filter(s => {
+          const d = new Date(s.date)
+          return d >= startOfWeek
+        })
+        .reduce((s2, row) => s2 + row.spend, 0)
+    }, 0)
+
+    const overallAdSpend = metaStats.reduce((sum, campaign) => {
+      return sum + campaign.summary.reduce((s2, row) => s2 + row.spend, 0)
+    }, 0)
+
     const totalIncome = mSales.reduce((a, c) => a + c.amount, 0)
     const totalCost = totalSalary + totalAdSpend
     const netProfit = totalIncome - totalCost
@@ -452,15 +483,12 @@ const SmmHub = () => {
     // LEADS monitoring: Today, This Week, This Month (Campaign), Overall
     const todayOrganic = todayTraffic.reduce((a, c) => a + c.organicLeads, 0)
     const todayPaid = todayTraffic.reduce((a, c) => a + c.paidLeads, 0)
-    const todayAdSpend = todayTraffic.reduce((a, c) => a + c.adSpend, 0)
-    
+
     const weekOrganic = wTraffic.reduce((a, c) => a + c.organicLeads, 0)
     const weekPaid = wTraffic.reduce((a, c) => a + c.paidLeads, 0)
-    const weekAdSpend = wTraffic.reduce((a, c) => a + c.adSpend, 0)
-    
+
     const overallOrganic = trafficLogs.reduce((a, c) => a + c.organicLeads, 0)
     const overallPaid = trafficLogs.reduce((a, c) => a + c.paidLeads, 0)
-    const overallAdSpend = trafficLogs.reduce((a, c) => a + c.adSpend, 0)
 
     const smmLogs = mLogs.filter(l => ['Content Creation','Engagement/Community Mgmt','Strategy & Planning'].includes(l.category))
     const smmCost = smmLogs.reduce((acc, log) => {
@@ -509,7 +537,7 @@ const SmmHub = () => {
       weekOrganic, weekPaid, weekAdSpend,
       overallOrganic, overallPaid, overallAdSpend,
     }
-  }, [logs, trafficLogs, salesLogs, workersList])
+  }, [logs, trafficLogs, salesLogs, workersList, metaStats])
 
   // Compute Meta ad spend by date
   const metaSpendByDate = useMemo(() => {
@@ -521,6 +549,18 @@ const SmmHub = () => {
     }
     return map
   }, [metaStats])
+
+  // Compute traffic leads by date (organic + paid from manual entries)
+  const trafficLeadsByDate = useMemo(() => {
+    const map: Record<string, { organic: number; paid: number }> = {}
+    for (const log of trafficLogs) {
+      const dateStr = typeof log.date === 'string' ? log.date.split('T')[0] : new Date(log.date).toISOString().split('T')[0]
+      if (!map[dateStr]) map[dateStr] = { organic: 0, paid: 0 }
+      map[dateStr].organic += log.organicLeads || 0
+      map[dateStr].paid += log.paidLeads || 0
+    }
+    return map
+  }, [trafficLogs])
 
   const formatTime = (mins) => `${Math.floor(mins/60)}h ${mins%60}m`
   const fmt = (n) => n?.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 }) ?? '—'
@@ -1148,7 +1188,7 @@ const SmmHub = () => {
             </div>
           </div>
           )}
-          {trafficSubTab === 'campaigns' && <CampaignsTab onLog={addActivityLog} />}
+          {trafficSubTab === 'campaigns' && <CampaignsTab onLog={addActivityLog} trafficLeadsByDate={trafficLeadsByDate} />}
           </div>
         )}
 
@@ -2536,13 +2576,14 @@ const MetaAdsSettings = ({ onLog }: { onLog?: (level: LogEntry['level'], msg: st
 }
 
 // ─── Campaigns Tab Component ────────────────────────────────────────────────────
-const CampaignsTab = ({ onLog }: { onLog?: (level: LogEntry['level'], msg: string) => void }) => {
+const CampaignsTab = ({ onLog, trafficLeadsByDate }: { onLog?: (level: LogEntry['level'], msg: string) => void; trafficLeadsByDate?: Record<string, { organic: number; paid: number }> }) => {
   const log = onLog ?? (() => {})
   const [data, setData] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [syncing, setSyncing] = useState(false)
   const [expandedId, setExpandedId] = useState<string | null>(null)
   const [range, setRange] = useState<'week' | 'month' | 'all'>('month')
+  const [selectedId, setSelectedId] = useState<string | null>(null)
 
   const fetchStats = async () => {
     setLoading(true)
@@ -2557,7 +2598,14 @@ const CampaignsTab = ({ onLog }: { onLog?: (level: LogEntry['level'], msg: strin
     setLoading(false)
   }
 
-  useEffect(() => { fetchStats() }, [range])
+  useEffect(() => {
+    fetchStats()
+    // Auto-select first campaign (alphabetically) on load
+    if (data.length > 0 && !selectedId) {
+      const sorted = [...data].sort((a, b) => a.label.localeCompare(b.label))
+      setSelectedId(sorted[0].id)
+    }
+  }, [range, data])
 
   const syncNow = async () => {
     setSyncing(true)
@@ -2596,6 +2644,59 @@ const CampaignsTab = ({ onLog }: { onLog?: (level: LogEntry['level'], msg: strin
   const colStyle = { padding: '11px 14px', fontSize: 13 }
   const thStyle = { padding: '9px 14px', textAlign: 'left' as const, fontSize: 11, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase' as const }
 
+  // Compute summary for selected campaign
+  const selectedCampaign = data.find(c => c.id === selectedId)
+  const dailyRows = selectedCampaign?.summary.map((row: any) => {
+    const trafficForDate = trafficLeadsByDate?.[row.date] || { organic: 0, paid: 0 }
+    const totalLeads = (row.leads || 0) + (trafficForDate.paid || 0)
+    const cpl = totalLeads > 0 && row.spend > 0 ? row.spend / totalLeads : null
+    const roas = row.spend > 0 && row.revenue ? (row.revenue / row.spend) : null
+    return { ...row, totalLeads, trafficOrganic: trafficForDate.organic || 0, cpl, roas }
+  }) || []
+
+  // Month summary
+  const monthRows = dailyRows.filter(r => {
+    const d = new Date(r.date)
+    const startOfMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1)
+    return d >= startOfMonth
+  })
+  const monthSummary = {
+    spend: monthRows.reduce((a, r) => a + (r.spend || 0), 0),
+    leads: monthRows.reduce((a, r) => a + (r.totalLeads || 0), 0),
+    organic: monthRows.reduce((a, r) => a + (r.trafficOrganic || 0), 0),
+    purchases: monthRows.reduce((a, r) => a + (r.purchases || 0), 0),
+    revenue: monthRows.reduce((a, r) => a + (r.revenue || 0), 0),
+  }
+  monthSummary['cpl'] = monthSummary.leads > 0 ? monthSummary.spend / monthSummary.leads : 0
+  monthSummary['roas'] = monthSummary.spend > 0 ? monthSummary.revenue / monthSummary.spend : 0
+
+  // Week summary
+  const now = new Date()
+  const startOfWeek = new Date(now)
+  startOfWeek.setDate(now.getDate() - now.getDay())
+  startOfWeek.setHours(0, 0, 0, 0)
+  const weekRows = dailyRows.filter(r => new Date(r.date) >= startOfWeek)
+  const weekSummary = {
+    spend: weekRows.reduce((a, r) => a + (r.spend || 0), 0),
+    leads: weekRows.reduce((a, r) => a + (r.totalLeads || 0), 0),
+    organic: weekRows.reduce((a, r) => a + (r.trafficOrganic || 0), 0),
+    purchases: weekRows.reduce((a, r) => a + (r.purchases || 0), 0),
+    revenue: weekRows.reduce((a, r) => a + (r.revenue || 0), 0),
+  }
+  weekSummary['cpl'] = weekSummary.leads > 0 ? weekSummary.spend / weekSummary.leads : 0
+  weekSummary['roas'] = weekSummary.spend > 0 ? weekSummary.revenue / weekSummary.spend : 0
+
+  // Chart data for spend (area chart)
+  const spendChartData = dailyRows.map((r: any) => ({ value: r.spend }))
+  // Chart data for leads (dual chart: paid + organic)
+  const leadsChartData = {
+    series: [
+      { color: '#3b82f6', data: dailyRows.map((r: any) => r.totalLeads) },  // paid + webhook
+      { color: '#10b981', data: dailyRows.map((r: any) => r.trafficOrganic) }  // organic
+    ],
+    labels: dailyRows.map((r: any) => r.date)
+  }
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -2618,63 +2719,196 @@ const CampaignsTab = ({ onLog }: { onLog?: (level: LogEntry['level'], msg: strin
           No campaign data yet. Configure campaigns in Settings → Meta Ads, then click Sync Now.
         </div>
       ) : (
-        data.map(campaign => (
-          <div key={campaign.id} style={{ background: 'white', borderRadius: 16, border: '1px solid #e2e8f0', overflow: 'hidden' }}>
-            <div style={{ padding: '14px 20px', borderBottom: '1px solid #f1f5f9', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <span style={{ fontWeight: 800, fontSize: 15 }}>{campaign.label}</span>
-              <button onClick={() => setExpandedId(expandedId === campaign.id ? null : campaign.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#64748b', fontSize: 12, fontWeight: 700 }}>
-                {expandedId === campaign.id ? '▲ Hide Ad Sets' : '▼ Show Ad Sets'}
-              </button>
+        <div style={{ display: 'grid', gridTemplateColumns: '220px 1fr', gap: 20 }}>
+          {/* Campaign Sidebar */}
+          <div style={{ background: 'white', borderRadius: 16, border: '1px solid #e2e8f0', padding: 16, height: 'fit-content' }}>
+            <div style={{ fontSize: 12, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', marginBottom: 12 }}>Campaigns</div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {[...data].sort((a, b) => a.label.localeCompare(b.label)).map(c => (
+                <button key={c.id} onClick={() => setSelectedId(c.id)} style={{
+                  background: selectedId === c.id ? '#f8fafc' : 'white',
+                  border: selectedId === c.id ? '2px solid #3b82f6' : '1px solid #e2e8f0',
+                  borderRadius: 8,
+                  padding: '10px 12px',
+                  textAlign: 'left',
+                  fontSize: 13,
+                  fontWeight: selectedId === c.id ? 700 : 500,
+                  color: selectedId === c.id ? '#1e293b' : '#64748b',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s'
+                }}>
+                  {c.label}
+                </button>
+              ))}
             </div>
-            <div style={{ overflowX: 'auto' }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                <thead><tr style={{ background: '#f8fafc' }}>
-                  {['Date', 'Ad Spend', 'Leads', 'CPL', 'Purchases', 'Revenue', 'ROAS'].map(h => <th key={h} style={thStyle}>{h}</th>)}
-                </tr></thead>
-                <tbody>
-                  {campaign.summary.length === 0 ? (
-                    <tr><td colSpan={7} style={{ ...colStyle, textAlign: 'center', color: '#94a3b8' }}>No data for this period</td></tr>
-                  ) : campaign.summary.map((row: any) => (
-                    <tr key={row.date} style={{ borderTop: '1px solid #f1f5f9' }}>
-                      <td style={colStyle}>{row.date}</td>
-                      <td style={{ ...colStyle, color: '#f59e0b', fontWeight: 700 }}>{fmtMoney(row.spend)}</td>
-                      <td style={{ ...colStyle, fontWeight: 700 }}>{row.leads}</td>
-                      <td style={colStyle}>{fmtMoney(row.cpl)}</td>
-                      <td style={{ ...colStyle, fontWeight: 700 }}>{row.purchases}</td>
-                      <td style={{ ...colStyle, color: '#10b981', fontWeight: 700 }}>{fmtMoney(row.revenue)}</td>
-                      <td style={{ ...colStyle, color: row.roas >= 1 ? '#10b981' : '#ef4444', fontWeight: 700 }}>{fmtX(row.roas)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+          </div>
 
-            {expandedId === campaign.id && campaign.adsets.length > 0 && (
-              <div style={{ borderTop: '2px solid #f1f5f9' }}>
-                <div style={{ padding: '10px 20px', background: '#f8fafc', fontSize: 11, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase' }}>Ad Set Breakdown</div>
-                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                  <thead><tr style={{ background: '#f8fafc' }}>
-                    {['Ad Set', 'Date', 'Spend', 'Leads', 'CPL', 'Purchases', 'Revenue', 'ROAS'].map(h => <th key={h} style={thStyle}>{h}</th>)}
-                  </tr></thead>
-                  <tbody>
-                    {campaign.adsets.map((row: any, i: number) => (
-                      <tr key={i} style={{ borderTop: '1px solid #f1f5f9' }}>
-                        <td style={{ ...colStyle, fontWeight: 600, color: '#475569' }}>{row.adsetName}</td>
-                        <td style={colStyle}>{row.date}</td>
-                        <td style={{ ...colStyle, color: '#f59e0b', fontWeight: 700 }}>{fmtMoney(row.spend)}</td>
-                        <td style={{ ...colStyle, fontWeight: 700 }}>{row.leads}</td>
-                        <td style={colStyle}>{fmtMoney(row.cpl)}</td>
-                        <td style={{ ...colStyle, fontWeight: 700 }}>{row.purchases}</td>
-                        <td style={{ ...colStyle, color: '#10b981', fontWeight: 700 }}>{fmtMoney(row.revenue)}</td>
-                        <td style={{ ...colStyle, color: row.roas >= 1 ? '#10b981' : '#ef4444', fontWeight: 700 }}>{fmtX(row.roas)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+          {/* Campaign Detail */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+            {selectedCampaign ? (
+              <>
+                {/* Summary Cards */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+                  {/* Month Card */}
+                  <div style={{ background: 'white', borderRadius: 16, border: '1px solid #e2e8f0', padding: 20 }}>
+                    <div style={{ fontSize: 12, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', marginBottom: 14 }}>This Month</div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                      <div>
+                        <div style={{ fontSize: 11, color: '#94a3b8', fontWeight: 600 }}>Spend</div>
+                        <div style={{ fontSize: 20, fontWeight: 800, color: '#f59e0b' }}>{fmtMoney(monthSummary.spend)}</div>
+                      </div>
+                      <div>
+                        <div style={{ fontSize: 11, color: '#94a3b8', fontWeight: 600 }}>Leads (Paid+Organic)</div>
+                        <div style={{ fontSize: 20, fontWeight: 800, color: '#1e293b' }}>{monthSummary.leads + monthSummary.organic}</div>
+                      </div>
+                      <div>
+                        <div style={{ fontSize: 11, color: '#94a3b8', fontWeight: 600 }}>Purchases</div>
+                        <div style={{ fontSize: 20, fontWeight: 800, color: '#10b981' }}>{monthSummary.purchases || 0}</div>
+                      </div>
+                      <div style={{ borderTop: '1px solid #f1f5f9', paddingTop: 8, marginTop: 8 }}>
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                          <div>
+                            <div style={{ fontSize: 10, color: '#94a3b8', fontWeight: 600 }}>ROAS</div>
+                            <div style={{ fontSize: 16, fontWeight: 700, color: monthSummary.roas >= 1 ? '#10b981' : '#ef4444' }}>{fmtX(monthSummary.roas || 0)}</div>
+                          </div>
+                          <div>
+                            <div style={{ fontSize: 10, color: '#94a3b8', fontWeight: 600 }}>CPL</div>
+                            <div style={{ fontSize: 16, fontWeight: 700, color: '#64748b' }}>{fmtMoney(monthSummary.cpl || 0)}</div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Week Card */}
+                  <div style={{ background: 'white', borderRadius: 16, border: '1px solid #e2e8f0', padding: 20 }}>
+                    <div style={{ fontSize: 12, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', marginBottom: 14 }}>This Week</div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                      <div>
+                        <div style={{ fontSize: 11, color: '#94a3b8', fontWeight: 600 }}>Spend</div>
+                        <div style={{ fontSize: 20, fontWeight: 800, color: '#f59e0b' }}>{fmtMoney(weekSummary.spend)}</div>
+                      </div>
+                      <div>
+                        <div style={{ fontSize: 11, color: '#94a3b8', fontWeight: 600 }}>Leads (Paid+Organic)</div>
+                        <div style={{ fontSize: 20, fontWeight: 800, color: '#1e293b' }}>{weekSummary.leads + weekSummary.organic}</div>
+                      </div>
+                      <div>
+                        <div style={{ fontSize: 11, color: '#94a3b8', fontWeight: 600 }}>Purchases</div>
+                        <div style={{ fontSize: 20, fontWeight: 800, color: '#10b981' }}>{weekSummary.purchases || 0}</div>
+                      </div>
+                      <div style={{ borderTop: '1px solid #f1f5f9', paddingTop: 8, marginTop: 8 }}>
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                          <div>
+                            <div style={{ fontSize: 10, color: '#94a3b8', fontWeight: 600 }}>ROAS</div>
+                            <div style={{ fontSize: 16, fontWeight: 700, color: weekSummary.roas >= 1 ? '#10b981' : '#ef4444' }}>{fmtX(weekSummary.roas || 0)}</div>
+                          </div>
+                          <div>
+                            <div style={{ fontSize: 10, color: '#94a3b8', fontWeight: 600 }}>CPL</div>
+                            <div style={{ fontSize: 16, fontWeight: 700, color: '#64748b' }}>{fmtMoney(weekSummary.cpl || 0)}</div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Charts */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+                  {/* Spend Chart */}
+                  <div style={{ background: 'white', borderRadius: 16, border: '1px solid #e2e8f0', padding: 20 }}>
+                    <div style={{ fontSize: 12, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', marginBottom: 12 }}>Daily Spend</div>
+                    <div style={{ height: 120 }}>
+                      {spendChartData.length >= 2 ? (
+                        <AreaChart data={spendChartData} color="#f59e0b" />
+                      ) : (
+                        <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#cbd5e1', fontSize: 12 }}>No data</div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Leads Chart */}
+                  <div style={{ background: 'white', borderRadius: 16, border: '1px solid #e2e8f0', padding: 20 }}>
+                    <div style={{ fontSize: 12, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', marginBottom: 12 }}>Paid vs Organic Leads</div>
+                    <div style={{ height: 120 }}>
+                      {leadsChartData.labels.length >= 2 ? (
+                        <DualChart series={leadsChartData.series} labels={leadsChartData.labels} height={120} />
+                      ) : (
+                        <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#cbd5e1', fontSize: 12 }}>No data</div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Daily Breakdown Table */}
+                <div style={{ background: 'white', borderRadius: 16, border: '1px solid #e2e8f0', overflow: 'hidden' }}>
+                  <div style={{ padding: '14px 20px', borderBottom: '1px solid #f1f5f9', fontWeight: 800, fontSize: 13 }}>Daily Breakdown</div>
+                  <div style={{ overflowX: 'auto' }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                      <thead><tr style={{ background: '#f8fafc' }}>
+                        {['Date', 'Spend', 'Paid Leads', 'Organic', 'CPL', 'Purchases', 'Revenue', 'ROAS'].map(h => <th key={h} style={thStyle}>{h}</th>)}
+                      </tr></thead>
+                      <tbody>
+                        {dailyRows.length === 0 ? (
+                          <tr><td colSpan={8} style={{ ...colStyle, textAlign: 'center', color: '#94a3b8' }}>No data for this period</td></tr>
+                        ) : dailyRows.map((row: any) => (
+                          <tr key={row.date} style={{ borderTop: '1px solid #f1f5f9' }}>
+                            <td style={colStyle}>{row.date}</td>
+                            <td style={{ ...colStyle, color: '#f59e0b', fontWeight: 700 }}>{fmtMoney(row.spend)}</td>
+                            <td style={{ ...colStyle, fontWeight: 700, color: '#3b82f6' }}>{row.totalLeads - row.trafficOrganic || 0}</td>
+                            <td style={{ ...colStyle, fontWeight: 700, color: '#10b981' }}>{row.trafficOrganic}</td>
+                            <td style={colStyle}>{fmtMoney(row.cpl)}</td>
+                            <td style={{ ...colStyle, fontWeight: 700 }}>{row.purchases}</td>
+                            <td style={{ ...colStyle, color: '#10b981', fontWeight: 700 }}>{fmtMoney(row.revenue)}</td>
+                            <td style={{ ...colStyle, color: row.roas >= 1 ? '#10b981' : '#ef4444', fontWeight: 700 }}>{fmtX(row.roas)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                {/* Ad Set Breakdown */}
+                {expandedId === selectedCampaign.id && selectedCampaign.adsets.length > 0 && (
+                  <div style={{ background: 'white', borderRadius: 16, border: '1px solid #e2e8f0', overflow: 'hidden' }}>
+                    <div style={{ padding: '14px 20px', borderBottom: '1px solid #f1f5f9', fontWeight: 800, fontSize: 13 }}>Ad Set Breakdown</div>
+                    <div style={{ overflowX: 'auto' }}>
+                      <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                        <thead><tr style={{ background: '#f8fafc' }}>
+                          {['Ad Set', 'Date', 'Spend', 'Leads', 'CPL', 'Purchases', 'Revenue', 'ROAS'].map(h => <th key={h} style={thStyle}>{h}</th>)}
+                        </tr></thead>
+                        <tbody>
+                          {selectedCampaign.adsets.map((row: any, i: number) => (
+                            <tr key={i} style={{ borderTop: '1px solid #f1f5f9' }}>
+                              <td style={{ ...colStyle, fontWeight: 600, color: '#475569' }}>{row.adsetName}</td>
+                              <td style={colStyle}>{row.date}</td>
+                              <td style={{ ...colStyle, color: '#f59e0b', fontWeight: 700 }}>{fmtMoney(row.spend)}</td>
+                              <td style={{ ...colStyle, fontWeight: 700 }}>{row.leads}</td>
+                              <td style={colStyle}>{fmtMoney(row.cpl)}</td>
+                              <td style={{ ...colStyle, fontWeight: 700 }}>{row.purchases}</td>
+                              <td style={{ ...colStyle, color: '#10b981', fontWeight: 700 }}>{fmtMoney(row.revenue)}</td>
+                              <td style={{ ...colStyle, color: row.roas >= 1 ? '#10b981' : '#ef4444', fontWeight: 700 }}>{fmtX(row.roas)}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+
+                {/* Toggle Ad Set Breakdown */}
+                {selectedCampaign.adsets.length > 0 && (
+                  <button onClick={() => setExpandedId(expandedId === selectedCampaign.id ? null : selectedCampaign.id)} style={{ alignSelf: 'flex-start', background: 'none', border: 'none', color: '#3b82f6', fontWeight: 700, fontSize: 13, cursor: 'pointer', padding: 0 }}>
+                    {expandedId === selectedCampaign.id ? '▲ Hide Ad Sets' : '▼ Show Ad Sets'}
+                  </button>
+                )}
+              </>
+            ) : (
+              <div style={{ background: 'white', borderRadius: 16, border: '1px solid #e2e8f0', padding: '40px 20px', textAlign: 'center', color: '#94a3b8', fontSize: 13 }}>
+                Select a campaign to view details
               </div>
             )}
           </div>
-        ))
+        </div>
       )}
     </div>
   )
