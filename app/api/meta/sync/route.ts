@@ -27,6 +27,9 @@ function toDateOnly(d: Date): Date {
 }
 
 export async function POST() {
+  const logs: string[] = []
+  logs.push(`[${new Date().toLocaleTimeString()}] Starting Meta API sync...`)
+
   try {
     // Load global Meta credentials from SiteSettings
     const siteSettingsRows = await prisma.siteSettings.findMany({
@@ -38,8 +41,12 @@ export async function POST() {
     }
 
     if (!cfg.metaToken || !cfg.metaAdAccountId) {
-      return Response.json({ error: { message: 'Meta credentials not configured', code: 'NOT_CONFIGURED' } }, { status: 400 })
+      logs.push('❌ Meta credentials not configured')
+      console.error('[meta/sync]', logs.join('\n'))
+      return Response.json({ error: { message: 'Meta credentials not configured', code: 'NOT_CONFIGURED' }, logs }, { status: 400 })
     }
+
+    logs.push('✓ Meta credentials loaded')
 
     const token = cfg.metaToken
     const adAccountId = cfg.metaAdAccountId
@@ -48,8 +55,11 @@ export async function POST() {
     // Load all active campaign configs
     const campaigns = await prisma.metaSettings.findMany({ where: { active: true } })
     if (campaigns.length === 0) {
-      return Response.json({ data: { message: 'No active campaign configs', synced: 0 } })
+      logs.push('⚠️ No active campaign configs found')
+      return Response.json({ data: { message: 'No active campaign configs', synced: 0, logs } })
     }
+
+    logs.push(`✓ Found ${campaigns.length} active campaign config(s)`)
 
     const now = new Date()
     const today = toDateOnly(now)
@@ -66,14 +76,21 @@ export async function POST() {
       // Adset level — per-adset spend
       const adsetData = await fetchMetaInsights(token, adAccountId, apiVersion, dateStr, 'adset')
 
+      logs.push(`\n📅 ${dateStr}:`)
+      logs.push(`  Meta API returned ${campaignData.length} campaign(s): ${campaignData.map(c => c.campaign_name).join(', ') || '(none)'}`)
+      logs.push(`  Meta API returned ${adsetData.length} adset(s): ${adsetData.map(a => `${a.campaign_name}/${a.adset_name}`).join(', ') || '(none)'}`)
+
       for (const config of campaigns) {
         const trackedCampaigns = config.metaCampaignNames as string[]
         const trackedAdsets = config.adsetNames as string[]
 
+        logs.push(`  Config "${config.label}": tracking campaigns [${trackedCampaigns.join(', ')}], adsets [${trackedAdsets.join(', ')}]`)
+
         // Campaign total
-        const campaignTotal = campaignData
-          .filter(r => trackedCampaigns.includes(r.campaign_name))
-          .reduce((sum, r) => sum + parseFloat(r.spend ?? '0'), 0)
+        const matchedCampaigns = campaignData.filter(r => trackedCampaigns.includes(r.campaign_name))
+        logs.push(`    Matched campaigns: ${matchedCampaigns.map(c => `${c.campaign_name}($${c.spend})`).join(', ') || '(none)'}`)
+
+        const campaignTotal = matchedCampaigns.reduce((sum, r) => sum + parseFloat(r.spend ?? '0'), 0)
 
         await prisma.metaSpendLog.upsert({
           where: { date_metaSettingsId_adsetName: { date, metaSettingsId: config.id, adsetName: '' } },
@@ -84,9 +101,10 @@ export async function POST() {
 
         // Per-adset spend
         for (const adsetName of trackedAdsets) {
-          const adsetSpend = adsetData
-            .filter(r => trackedCampaigns.includes(r.campaign_name) && r.adset_name === adsetName)
-            .reduce((sum, r) => sum + parseFloat(r.spend ?? '0'), 0)
+          const matchedAdsets = adsetData.filter(r => trackedCampaigns.includes(r.campaign_name) && r.adset_name === adsetName)
+          logs.push(`    Adset "${adsetName}": ${matchedAdsets.map(a => `$${a.spend}`).join(', ') || '(no match)'}`)
+
+          const adsetSpend = matchedAdsets.reduce((sum, r) => sum + parseFloat(r.spend ?? '0'), 0)
 
           await prisma.metaSpendLog.upsert({
             where: { date_metaSettingsId_adsetName: { date, metaSettingsId: config.id, adsetName } },
@@ -98,10 +116,13 @@ export async function POST() {
       }
     }
 
-    return Response.json({ data: { message: 'Sync complete', upserts: totalUpserts } })
+    logs.push(`\n✓ Sync complete — ${totalUpserts} records upserted`)
+    console.log('[meta/sync]', logs.join('\n'))
+    return Response.json({ data: { message: 'Sync complete', upserts: totalUpserts, logs } })
   } catch (err) {
-    console.error('[meta/sync]', err)
-    return Response.json({ error: { message: String(err), code: 'SYNC_ERROR' } }, { status: 500 })
+    logs.push(`\n❌ Error: ${String(err)}`)
+    console.error('[meta/sync]', logs.join('\n'))
+    return Response.json({ error: { message: String(err), code: 'SYNC_ERROR', logs } }, { status: 500 })
   }
 }
 

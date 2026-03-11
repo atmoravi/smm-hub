@@ -2488,8 +2488,21 @@ const CampaignsTab = ({ onLog }: { onLog?: (level: LogEntry['level'], msg: strin
       const json = await res.json()
       if (res.ok) {
         log('success', `Sync complete — ${json.data?.upserts ?? 0} records upserted`)
+        // Log detailed sync info
+        if (json.data?.logs && Array.isArray(json.data.logs)) {
+          json.data.logs.forEach((logLine: string) => {
+            if (logLine.includes('❌') || logLine.includes('Error')) log('error', logLine)
+            else if (logLine.includes('⚠️')) log('warn', logLine)
+            else if (logLine.includes('✓') || logLine.includes('✅')) log('success', logLine)
+            else log('info', logLine)
+          })
+        }
       } else {
         log('error', `Sync failed: ${json.error?.message ?? `HTTP ${res.status}`}`)
+        // Log error details
+        if (json.error?.logs && Array.isArray(json.error.logs)) {
+          json.error.logs.forEach((logLine: string) => log('info', logLine))
+        }
       }
     } catch (err) {
       log('error', `Sync error: ${String(err)}`)
