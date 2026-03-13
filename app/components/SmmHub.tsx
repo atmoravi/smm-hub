@@ -10,6 +10,7 @@ import {
   Building
 } from 'lucide-react'
 import PostsTab from './PostsTab'
+import TimeClock from './TimeClock'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface LogEntry {
@@ -116,7 +117,7 @@ const SmmHub = () => {
   const addActivityLog = (level: LogEntry['level'], message: string) =>
     setActivityLogs(prev => [...prev, { time: new Date().toLocaleTimeString(), level, message }])
   const [contentSubTab, setContentSubTab] = useState<'actual' | 'archive'>('actual') // Content sub-tabs - MUST be here for hooks order
-  const [trafficSubTab, setTrafficSubTab] = useState<'results' | 'campaigns'>('results')
+  const [trafficSubTab, setTrafficSubTab] = useState<'results' | 'campaigns' | 'yearly'>('results')
 
   // Company branding
   const [companyName, setCompanyName] = useState('')
@@ -562,6 +563,46 @@ const SmmHub = () => {
     return map
   }, [trafficLogs])
 
+  // Group traffic data by month for Yearly view
+  const trafficByMonth = useMemo(() => {
+    const now = new Date()
+    const currentYear = now.getFullYear()
+    const months = Array.from({ length: 12 }, (_, i) => ({
+      month: i,
+      label: new Date(currentYear, i, 1).toLocaleString('en-US', { month: 'short' }),
+      organic: 0,
+      paid: 0,
+      days: [] as { date: string; organic: number; paid: number; campaignName?: string }[]
+    }))
+
+    for (const log of trafficLogs) {
+      const logDate = new Date(log.date)
+      if (logDate.getFullYear() !== currentYear) continue
+      
+      const monthIdx = logDate.getMonth()
+      const dateStr = logDate.toISOString().split('T')[0]
+      const organic = log.organicLeads || 0
+      const paid = log.paidLeads || 0
+      
+      months[monthIdx].organic += organic
+      months[monthIdx].paid += paid
+      months[monthIdx].days.push({
+        date: dateStr,
+        organic,
+        paid,
+        campaignName: log.campaignName || undefined
+      })
+    }
+
+    // Sort days within each month by date
+    months.forEach(m => m.days.sort((a, b) => a.date.localeCompare(b.date)))
+
+    return months
+  }, [trafficLogs])
+
+  // State for expanded month in Yearly view
+  const [expandedMonth, setExpandedMonth] = useState<number | null>(null)
+
   const formatTime = (mins) => `${Math.floor(mins/60)}h ${mins%60}m`
   const fmt = (n) => n?.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 }) ?? '—'
   const fmtDollar = (n) => n !== null && n !== undefined ? `$${Math.abs(n).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}` : '—'
@@ -570,6 +611,7 @@ const SmmHub = () => {
   if (authState === 'select') return (
     <div style={{ minHeight: '100vh', background: '#0f172a', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: "'DM Sans', sans-serif" }}>
       <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700;900&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet"/>
+      <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
       <div style={{ textAlign: 'center', maxWidth: 420, padding: '0 24px', width: '100%' }}>
         <div style={{ marginBottom: 40 }}>
           <div style={{ width: 56, height: 56, borderRadius: 16, background: 'linear-gradient(135deg,#3b82f6,#6366f1)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px' }}>
@@ -1062,42 +1104,51 @@ const SmmHub = () => {
 
         {/* ── EFFORT LOG (worker and logged-in admins) ── */}
         {activeTab === 'effort' && !!currentWorker && (
-          <div style={{ display: 'grid', gridTemplateColumns: '320px 1fr', gap: 20 }}>
-            <div style={{ background: 'white', borderRadius: 16, padding: '24px', border: '1px solid #e2e8f0' }}>
-              <h2 style={{ fontWeight: 900, fontSize: 16, color: '#3b82f6', margin: '0 0 18px', display: 'flex', alignItems: 'center', gap: 8 }}><Plus size={18}/> Log Effort</h2>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                <input type="date" value={currentDate} onChange={e => setCurrentDate(e.target.value)} style={{ padding: '10px 12px', border: '1px solid #e2e8f0', borderRadius: 10, fontSize: 13 }}/>
-                <input type="number" placeholder="Minutes" value={minutes} onChange={e => setMinutes(e.target.value)} style={{ padding: '10px 12px', border: '1px solid #e2e8f0', borderRadius: 10, fontSize: 13 }}/>
-                <select value={category} onChange={e => setCategory(e.target.value)} style={{ padding: '10px 12px', border: '1px solid #e2e8f0', borderRadius: 10, fontSize: 13, background: 'white' }}>
-                  {TASK_CATEGORIES.map(c => <option key={c}>{c}</option>)}
-                </select>
-                <textarea placeholder="Notes..." value={note} onChange={e => setNote(e.target.value)} style={{ padding: '10px 12px', border: '1px solid #e2e8f0', borderRadius: 10, fontSize: 13, height: 72, resize: 'none' }}/>
-                <button onClick={addLog} style={{ background: '#3b82f6', border: 'none', borderRadius: 10, padding: '12px', color: 'white', fontWeight: 700, cursor: 'pointer', fontSize: 14 }}>Add Log</button>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
+            {/* Time Clock for real-time tracking */}
+            <TimeClock currentWorker={currentWorker} onLog={addActivityLog} />
+
+            {/* Manual effort log form */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+              <div style={{ background: 'white', borderRadius: 16, padding: '24px', border: '1px solid #e2e8f0' }}>
+                <h2 style={{ fontWeight: 900, fontSize: 16, color: '#3b82f6', margin: '0 0 18px', display: 'flex', alignItems: 'center', gap: 8 }}><Plus size={18}/> Manual Log Entry</h2>
+                <p style={{ color: '#64748b', fontSize: 12, margin: '0 0 16px' }}>For back-dated or quick entries</p>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  <input type="date" value={currentDate} onChange={e => setCurrentDate(e.target.value)} style={{ padding: '10px 12px', border: '1px solid #e2e8f0', borderRadius: 10, fontSize: 13 }}/>
+                  <input type="number" placeholder="Minutes" value={minutes} onChange={e => setMinutes(e.target.value)} style={{ padding: '10px 12px', border: '1px solid #e2e8f0', borderRadius: 10, fontSize: 13 }}/>
+                  <select value={category} onChange={e => setCategory(e.target.value)} style={{ padding: '10px 12px', border: '1px solid #e2e8f0', borderRadius: 10, fontSize: 13, background: 'white' }}>
+                    {TASK_CATEGORIES.map(c => <option key={c}>{c}</option>)}
+                  </select>
+                  <textarea placeholder="Notes..." value={note} onChange={e => setNote(e.target.value)} style={{ padding: '10px 12px', border: '1px solid #e2e8f0', borderRadius: 10, fontSize: 13, height: 72, resize: 'none' }}/>
+                  <button onClick={addLog} style={{ background: '#3b82f6', border: 'none', borderRadius: 10, padding: '12px', color: 'white', fontWeight: 700, cursor: 'pointer', fontSize: 14 }}>Add Log</button>
+                </div>
               </div>
-            </div>
-            <div style={{ background: 'white', borderRadius: 16, border: '1px solid #e2e8f0', overflow: 'hidden' }}>
-              <div style={{ padding: '16px 24px', borderBottom: '1px solid #f1f5f9', fontWeight: 800, fontSize: 14 }}>My Logs</div>
-              <div style={{ overflowY: 'auto', maxHeight: 500 }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                  <thead><tr style={{ background: '#f8fafc' }}>
-                    {['Date','Category','Duration','Note',''].map(h => <th key={h} style={{ padding: '10px 18px', textAlign: 'left', fontSize: 11, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase' }}>{h}</th>)}
-                  </tr></thead>
-                  <tbody>
-                    {logs.length === 0 ? (
-                      <tr><td colSpan={5} style={{padding:'40px 20px',textAlign:'center',color:'#94a3b8'}}>No logs yet. Start by logging your effort.</td></tr>
-                    ) : (
-                      logs.slice(0, 20).map((l: any) => (
-                        <tr key={l.id} style={{ borderTop: '1px solid #f1f5f9' }}>
-                          <td style={{ padding: '13px 18px', fontSize: 13 }}>{new Date(l.date).toLocaleDateString()}</td>
-                          <td style={{ padding: '13px 18px', fontSize: 13, fontWeight: 600 }}>{l.category}</td>
-                          <td style={{ padding: '13px 18px', fontSize: 13 }}>{l.minutes}m</td>
-                          <td style={{ padding: '13px 18px', fontSize: 12, color: '#94a3b8' }}>{l.note || '—'}</td>
-                          <td style={{ padding: '13px 18px' }}></td>
-                        </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
+
+              {/* Recent logs */}
+              <div style={{ background: 'white', borderRadius: 16, border: '1px solid #e2e8f0', overflow: 'hidden', flex: 1 }}>
+                <div style={{ padding: '16px 24px', borderBottom: '1px solid #f1f5f9', fontWeight: 800, fontSize: 14 }}>My Logs</div>
+                <div style={{ overflowY: 'auto', maxHeight: 400 }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                    <thead><tr style={{ background: '#f8fafc' }}>
+                      {['Date','Category','Duration','Note',''].map(h => <th key={h} style={{ padding: '10px 18px', textAlign: 'left', fontSize: 11, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase' }}>{h}</th>)}
+                    </tr></thead>
+                    <tbody>
+                      {logs.length === 0 ? (
+                        <tr><td colSpan={5} style={{padding:'40px 20px',textAlign:'center',color:'#94a3b8'}}>No logs yet.</td></tr>
+                      ) : (
+                        logs.slice(0, 20).map((l: any) => (
+                          <tr key={l.id} style={{ borderTop: '1px solid #f1f5f9' }}>
+                            <td style={{ padding: '13px 18px', fontSize: 13 }}>{new Date(l.date).toLocaleDateString()}</td>
+                            <td style={{ padding: '13px 18px', fontSize: 13, fontWeight: 600 }}>{l.category}</td>
+                            <td style={{ padding: '13px 18px', fontSize: 13 }}>{l.minutes}m</td>
+                            <td style={{ padding: '13px 18px', fontSize: 12, color: '#94a3b8' }}>{l.note || '—'}</td>
+                            <td style={{ padding: '13px 18px' }}></td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
               </div>
             </div>
           </div>
@@ -1108,9 +1159,9 @@ const SmmHub = () => {
           <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
             {/* Traffic sub-tabs */}
             <div style={{ display: 'flex', gap: 8 }}>
-              {(['results', 'campaigns'] as const).map(tab => (
+              {(['results', 'yearly', 'campaigns'] as const).map(tab => (
                 <button key={tab} onClick={() => setTrafficSubTab(tab)} style={{ padding: '8px 20px', borderRadius: 8, border: trafficSubTab === tab ? 'none' : '1px solid #e2e8f0', background: trafficSubTab === tab ? '#0f172a' : 'white', color: trafficSubTab === tab ? 'white' : '#64748b', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
-                  {tab === 'results' ? 'Results' : 'Campaigns'}
+                  {tab === 'results' ? 'Results' : tab === 'yearly' ? 'Yearly' : 'Campaigns'}
                 </button>
               ))}
             </div>
@@ -1188,6 +1239,154 @@ const SmmHub = () => {
             </div>
           </div>
           )}
+
+          {/* Yearly View Tab */}
+          {trafficSubTab === 'yearly' && (
+            <div style={{ background: 'white', borderRadius: 16, border: '1px solid #e2e8f0', overflow: 'hidden' }}>
+              <div style={{ padding: '20px 24px', borderBottom: '1px solid #f1f5f9', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div>
+                  <h3 style={{ fontWeight: 900, fontSize: 16, margin: '0 0 4px' }}>{new Date().getFullYear()} Traffic Summary</h3>
+                  <p style={{ color: '#94a3b8', fontSize: 12, margin: 0 }}>Monthly totals — click to expand for daily breakdown</p>
+                </div>
+                <div style={{ display: 'flex', gap: 16 }}>
+                  {[{l:'Organic',c:'#10b981'},{l:'Paid',c:'#3b82f6'}].map(s => (
+                    <div key={s.l} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <div style={{ width: 10, height: 10, borderRadius: '50%', background: s.c }}/>
+                      <span style={{ fontSize: 12, color: '#64748b', fontWeight: 600 }}>{s.l}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div style={{ overflowY: 'auto', maxHeight: 600 }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                  <thead>
+                    <tr style={{ background: '#f8fafc' }}>
+                      <th style={{ ...thStyle, width: 40 }}></th>
+                      <th style={thStyle}>Month</th>
+                      <th style={{ ...thStyle, textAlign: 'right' }}>Organic Leads</th>
+                      <th style={{ ...thStyle, textAlign: 'right' }}>Paid Leads</th>
+                      <th style={{ ...thStyle, textAlign: 'right' }}>Total Leads</th>
+                      <th style={{ ...thStyle, textAlign: 'right', color: '#3b82f6' }}>Organic %</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {trafficByMonth.map((m, idx) => {
+                      const total = m.organic + m.paid
+                      const organicPct = total > 0 ? (m.organic / total * 100) : 0
+                      const isExpanded = expandedMonth === idx
+                      const hasData = m.days.length > 0
+
+                      return (
+                        <React.Fragment key={m.month}>
+                          {/* Month Summary Row */}
+                          <tr
+                            onClick={() => hasData && setExpandedMonth(isExpanded ? null : idx)}
+                            style={{
+                              borderTop: '1px solid #f1f5f9',
+                              background: isExpanded ? '#eff6ff' : 'white',
+                              cursor: hasData ? 'pointer' : 'default',
+                              transition: 'background 0.2s'
+                            }}
+                          >
+                            <td style={{ padding: '14px 16px', textAlign: 'center' }}>
+                              {hasData && (
+                                <ChevronDown
+                                  size={16}
+                                  color="#64748b"
+                                  style={{
+                                    transition: 'transform 0.2s',
+                                    transform: isExpanded ? 'rotate(180deg)' : 'rotate(0deg)'
+                                  }}
+                                />
+                              )}
+                            </td>
+                            <td style={{ padding: '14px 16px', fontWeight: 700, fontSize: 14, color: hasData ? '#1e293b' : '#94a3b8' }}>
+                              {m.label}
+                              {!hasData && ' (no data)'}
+                            </td>
+                            <td style={{ ...colStyle, textAlign: 'right', fontWeight: 700, color: '#10b981', fontSize: 14 }}>
+                              {fmt(m.organic)}
+                            </td>
+                            <td style={{ ...colStyle, textAlign: 'right', fontWeight: 700, color: '#3b82f6', fontSize: 14 }}>
+                              {fmt(m.paid)}
+                            </td>
+                            <td style={{ ...colStyle, textAlign: 'right', fontWeight: 800, fontSize: 15 }}>
+                              {fmt(total)}
+                            </td>
+                            <td style={{ ...colStyle, textAlign: 'right' }}>
+                              <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                                <div style={{ width: 60, height: 6, background: '#e2e8f0', borderRadius: 3, overflow: 'hidden' }}>
+                                  <div style={{ width: `${organicPct}%`, height: '100%', background: organicPct >= 50 ? '#10b981' : organicPct >= 20 ? '#f59e0b' : '#ef4444', borderRadius: 3 }}/>
+                                </div>
+                                <span style={{ fontSize: 12, fontWeight: 700, color: organicPct >= 50 ? '#10b981' : organicPct >= 20 ? '#f59e0b' : '#ef4444' }}>
+                                  {organicPct.toFixed(0)}%
+                                </span>
+                              </div>
+                            </td>
+                          </tr>
+
+                          {/* Expanded Daily Breakdown */}
+                          {isExpanded && hasData && (
+                            <tr>
+                              <td colSpan={6} style={{ padding: 0, background: '#f8fafc' }}>
+                                <div style={{ padding: '16px 24px' }}>
+                                  <div style={{ fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 12 }}>
+                                    Daily Breakdown — {m.label}
+                                  </div>
+                                  <div style={{ background: 'white', borderRadius: 8, border: '1px solid #e2e8f0', overflow: 'hidden' }}>
+                                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+                                      <thead>
+                                        <tr style={{ background: '#f1f5f9' }}>
+                                          <th style={{ ...thStyle, padding: '8px 14px' }}>Date</th>
+                                          <th style={{ ...thStyle, padding: '8px 14px' }}>Campaign</th>
+                                          <th style={{ ...thStyle, padding: '8px 14px', textAlign: 'right' }}>Organic</th>
+                                          <th style={{ ...thStyle, padding: '8px 14px', textAlign: 'right' }}>Paid</th>
+                                          <th style={{ ...thStyle, padding: '8px 14px', textAlign: 'right' }}>Total</th>
+                                        </tr>
+                                      </thead>
+                                      <tbody>
+                                        {m.days.map((day, dayIdx) => (
+                                          <tr key={day.date} style={{ borderTop: dayIdx === 0 ? 'none' : '1px solid #f1f5f9' }}>
+                                            <td style={{ padding: '10px 14px', fontSize: 12, fontFamily: "'DM Mono', monospace" }}>
+                                              {new Date(day.date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
+                                            </td>
+                                            <td style={{ padding: '10px 14px', fontSize: 12, color: '#64748b' }}>
+                                              {day.campaignName || '—'}
+                                            </td>
+                                            <td style={{ padding: '10px 14px', fontSize: 12, textAlign: 'right', fontWeight: 700, color: '#10b981' }}>
+                                              {fmt(day.organic)}
+                                            </td>
+                                            <td style={{ padding: '10px 14px', fontSize: 12, textAlign: 'right', fontWeight: 700, color: '#3b82f6' }}>
+                                              {fmt(day.paid)}
+                                            </td>
+                                            <td style={{ padding: '10px 14px', fontSize: 12, textAlign: 'right', fontWeight: 800 }}>
+                                              {fmt(day.organic + day.paid)}
+                                            </td>
+                                          </tr>
+                                        ))}
+                                      </tbody>
+                                    </table>
+                                  </div>
+                                </div>
+                              </td>
+                            </tr>
+                          )}
+                        </React.Fragment>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+
+              {trafficByMonth.every(m => m.days.length === 0) && (
+                <div style={{ textAlign: 'center', padding: 60, color: '#94a3b8' }}>
+                  No traffic data for {new Date().getFullYear()} yet. Start by submitting traffic data in the Results tab.
+                </div>
+              )}
+            </div>
+          )}
+
           {trafficSubTab === 'campaigns' && <CampaignsTab onLog={addActivityLog} trafficLeadsByDate={trafficLeadsByDate} />}
           </div>
         )}
@@ -2584,6 +2783,45 @@ const CampaignsTab = ({ onLog, trafficLeadsByDate }: { onLog?: (level: LogEntry[
   const [expandedId, setExpandedId] = useState<string | null>(null)
   const [range, setRange] = useState<'week' | 'month' | 'all'>('month')
   const [selectedId, setSelectedId] = useState<string | null>(null)
+  
+  // Period selector for sync
+  const [syncPeriod, setSyncPeriod] = useState<'today' | 'week' | 'month' | 'lastMonth'>('today')
+
+  // Helper to get date range for sync period
+  const getSyncDateRange = () => {
+    const now = new Date()
+    let startDate: Date
+    let endDate: Date = now
+    
+    switch (syncPeriod) {
+      case 'today':
+        startDate = new Date(now)
+        break
+      case 'week':
+        // Start of week (Monday)
+        startDate = new Date(now)
+        const dayOfWeek = now.getDay() || 7 // Convert Sunday to 7
+        startDate.setDate(now.getDate() - dayOfWeek + 1)
+        startDate.setHours(0, 0, 0, 0)
+        break
+      case 'month':
+        // 1st of current month
+        startDate = new Date(now.getFullYear(), now.getMonth(), 1)
+        break
+      case 'lastMonth':
+        // Full previous month
+        startDate = new Date(now.getFullYear(), now.getMonth() - 1, 1)
+        endDate = new Date(now.getFullYear(), now.getMonth(), 0)
+        break
+      default:
+        startDate = new Date(now)
+    }
+    
+    return {
+      start: startDate.toISOString().split('T')[0],
+      end: endDate.toISOString().split('T')[0]
+    }
+  }
 
   const fetchStats = async () => {
     setLoading(true)
@@ -2609,12 +2847,31 @@ const CampaignsTab = ({ onLog, trafficLeadsByDate }: { onLog?: (level: LogEntry[
 
   const syncNow = async () => {
     setSyncing(true)
-    log('info', 'Starting Meta API sync...')
+    
+    // Get selected date range
+    const dateRange = getSyncDateRange()
+    const periodLabels = {
+      today: 'Today',
+      week: 'This Week',
+      month: 'This Month',
+      lastMonth: 'Last Month'
+    }
+    
+    log('info', `Starting Meta API sync for ${periodLabels[syncPeriod]} (${dateRange.start} to ${dateRange.end})...`)
+    
     try {
-      const res = await fetch('/api/meta/sync', { method: 'POST' })
+      const res = await fetch('/api/meta/sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          startDate: dateRange.start,
+          endDate: dateRange.end
+        })
+      })
       const json = await res.json()
       if (res.ok) {
-        log('success', `Sync complete — ${json.data?.upserts ?? 0} records upserted`)
+        const days = json.data?.syncedDays || 1
+        log('success', `Sync complete — ${json.data?.upserts ?? 0} records upserted over ${days} day(s)`)
         // Log detailed sync info
         if (json.data?.logs && Array.isArray(json.data.logs)) {
           json.data.logs.forEach((logLine: string) => {
@@ -2699,17 +2956,79 @@ const CampaignsTab = ({ onLog, trafficLeadsByDate }: { onLog?: (level: LogEntry[
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <div style={{ display: 'flex', gap: 8 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          {/* View range selector */}
           {(['week', 'month', 'all'] as const).map(r => (
             <button key={r} onClick={() => setRange(r)} style={{ padding: '7px 16px', borderRadius: 8, border: range === r ? 'none' : '1px solid #e2e8f0', background: range === r ? '#0f172a' : 'white', color: range === r ? 'white' : '#64748b', fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>
               {r === 'week' ? 'This Week' : r === 'month' ? 'This Month' : 'All Time'}
             </button>
           ))}
         </div>
-        <button onClick={syncNow} disabled={syncing} style={{ background: 'linear-gradient(135deg,#3b82f6,#6366f1)', border: 'none', borderRadius: 8, padding: '8px 20px', color: 'white', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
-          {syncing ? 'Syncing...' : '↻ Sync Now'}
-        </button>
+        
+        <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+          {/* Sync period selector */}
+          <span style={{ fontSize: 12, color: '#64748b', fontWeight: 600 }}>Sync:</span>
+          {(['today', 'week', 'month', 'lastMonth'] as const).map(p => {
+            const labels = {
+              today: 'Today',
+              week: 'Week',
+              month: 'Month',
+              lastMonth: 'Last Month'
+            }
+            const isSelected = syncPeriod === p
+            return (
+              <button
+                key={p}
+                onClick={() => setSyncPeriod(p)}
+                title={p === 'today' ? 'Today only' : p === 'week' ? 'Monday to today' : p === 'month' ? '1st of month to today' : 'Full previous month'}
+                style={{
+                  padding: '6px 12px',
+                  borderRadius: 6,
+                  border: isSelected ? '1px solid #3b82f6' : '1px solid #e2e8f0',
+                  background: isSelected ? '#eff6ff' : 'white',
+                  color: isSelected ? '#1e40af' : '#64748b',
+                  fontWeight: isSelected ? 700 : 500,
+                  fontSize: 11,
+                  cursor: 'pointer',
+                  transition: 'all 0.15s'
+                }}
+              >
+                {labels[p]}
+              </button>
+            )
+          })}
+          
+          <div style={{ width: 1, height: 20, background: '#e2e8f0', margin: '0 4px' }} />
+          
+          {/* Sync Now button */}
+          <button
+            onClick={syncNow}
+            disabled={syncing}
+            style={{
+              background: syncing ? 'linear-gradient(135deg,#94a3b8,#64748b)' : 'linear-gradient(135deg,#3b82f6,#6366f1)',
+              border: 'none',
+              borderRadius: 8,
+              padding: '8px 20px',
+              color: 'white',
+              fontWeight: 700,
+              fontSize: 13,
+              cursor: syncing ? 'not-allowed' : 'pointer',
+              opacity: syncing ? 0.7 : 1,
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6
+            }}
+          >
+            {syncing && (
+              <svg style={{ animation: 'spin 1s linear infinite' }} width="14" height="14" viewBox="0 0 24 24" fill="none">
+                <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" strokeDasharray="31.4 31.4" strokeLinecap="round" opacity="0.3"/>
+                <path d="M12 2a10 10 0 0 1 10 10" stroke="currentColor" strokeWidth="3" strokeLinecap="round"/>
+              </svg>
+            )}
+            {syncing ? 'Syncing...' : '↻ Sync Now'}
+          </button>
+        </div>
       </div>
 
       {loading ? (

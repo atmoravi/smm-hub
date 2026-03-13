@@ -1,6 +1,31 @@
 // app/api/meta/sync/route.ts
 // Called by Vercel cron (hourly) and manual "Sync Now" button
 import { prisma } from '@/lib/prisma'
+import { z } from 'zod'
+
+const SyncRequestSchema = z.object({
+  startDate: z.string().optional(), // ISO date "2026-02-01"
+  endDate: z.string().optional(),   // ISO date "2026-02-28"
+})
+
+function toDateOnly(d: Date): Date {
+  return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()))
+}
+
+function parseDate(dateStr: string): Date {
+  const d = new Date(dateStr)
+  return toDateOnly(d)
+}
+
+function getDaysInRange(start: Date, end: Date): Date[] {
+  const days: Date[] = []
+  const current = new Date(start)
+  while (current <= end) {
+    days.push(new Date(current))
+    current.setDate(current.getDate() + 1)
+  }
+  return days
+}
 
 async function fetchMetaInsights(
   token: string,
@@ -22,13 +47,41 @@ async function fetchMetaInsights(
   return json.data ?? []
 }
 
-function toDateOnly(d: Date): Date {
-  return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()))
-}
-
-export async function POST() {
+export async function POST(req: Request) {
   const logs: string[] = []
   logs.push(`[${new Date().toLocaleTimeString()}] Starting Meta API sync...`)
+
+  // Parse request body for date range
+  let startDate: Date | null = null
+  let endDate: Date | null = null
+
+  try {
+    const body = await req.json()
+    const parsed = SyncRequestSchema.safeParse(body)
+    if (parsed.success && parsed.data.startDate && parsed.data.endDate) {
+      startDate = parseDate(parsed.data.startDate)
+      endDate = parseDate(parsed.data.endDate)
+      
+      // Validate range (max 30 days)
+      const diffTime = Math.abs(endDate.getTime() - startDate.getTime())
+      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
+      
+      if (diffDays > 30) {
+        logs.push(`⚠️ Date range too large (${diffDays} days), limiting to 30 days`)
+        endDate = new Date(startDate)
+        endDate.setDate(endDate.getDate() + 30)
+      }
+      
+      logs.push(`📅 Date range: ${parsed.data.startDate} to ${parsed.data.endDate}`)
+    }
+  } catch (err) {
+    // No body or invalid JSON, use default (today only)
+  }
+
+  // Default to today if no dates provided
+  const now = new Date()
+  const today = toDateOnly(now)
+  const dates = startDate && endDate ? getDaysInRange(startDate, endDate) : [today]
 
   try {
     // Load global Meta credentials from SiteSettings
@@ -60,11 +113,6 @@ export async function POST() {
     }
 
     logs.push(`✓ Found ${campaigns.length} active campaign config(s)`)
-
-    const now = new Date()
-    const today = toDateOnly(now)
-    const yesterday = toDateOnly(new Date(now.getTime() - 86400000))
-    const dates = [today, yesterday]
 
     let totalUpserts = 0
 
@@ -128,7 +176,24 @@ export async function POST() {
 
     logs.push(`\n✓ Sync complete — ${totalUpserts} records upserted`)
     console.log('[meta/sync]', logs.join('\n'))
-    return Response.json({ data: { message: 'Sync complete', upserts: totalUpserts, logs } })
+    
+    const response: any = { 
+      data: { 
+        message: 'Sync complete', 
+        upserts: totalUpserts, 
+        logs,
+        syncedDays: dates.length
+      } 
+    }
+    
+    if (startDate && endDate) {
+      response.data.dateRange = {
+        start: startDate.toISOString().split('T')[0],
+        end: endDate.toISOString().split('T')[0]
+      }
+    }
+    
+    return Response.json(response)
   } catch (err) {
     logs.push(`\n❌ Error: ${String(err)}`)
     console.error('[meta/sync]', logs.join('\n'))

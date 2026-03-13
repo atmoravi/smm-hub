@@ -20,6 +20,30 @@ model EffortLog {
   userId     String
   categoryRate Float  @default(25) // Rate at time of logging
   createdAt  DateTime @default(now())
+
+  // Link to work session if created from a timed session
+  workSessionId String? @unique
+  workSession   WorkSession? @relation(fields: [workSessionId], references: [id], onDelete: SetNull)
+}
+
+// WorkSession: Tracks real-time work blocks for AI-ready summarization
+model WorkSession {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  startTime   DateTime @default(now())
+  endTime     DateTime?
+  duration    Int      @default(0)
+  category    String
+  notes       String   @db.Text
+  status      String   @default("active")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  effortLog   EffortLog?
+
+  @@index([userId])
+  @@index([status])
+  @@index([startTime])
 }
 
 model TrafficLog {
@@ -64,7 +88,8 @@ model User {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  effortLogs EffortLog[]
+  effortLogs  EffortLog[]
+  workSessions WorkSession[]
 }
 
 model SiteSettings {
